@@ -1,0 +1,23 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #0f172a; }
+      .fg { fill: #f8fafc; }
+      .accent { fill: #059669; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #f8fafc; }
+      .fg { fill: #0f172a; }
+      .accent { fill: #059669; }
+    }
+  </style>
+  <rect class="bg" width="180" height="180" rx="37" />
+  <!-- Nhà / mái -->
+  <path class="fg" d="M90 35L50 72H65V110H115V72H130L90 35Z" />
+  <!-- Cửa -->
+  <rect class="accent" x="78" y="78" width="24" height="32" rx="4" />
+  <!-- Dấu tick kiểm định -->
+  <path class="accent" d="M130 115L140 125L160 105" stroke="#059669" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <circle class="accent" cx="150" cy="105" r="16" />
+  <path class="fg" d="M144 105L148 109L156 101" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>
