@@ -10,6 +10,12 @@ const nextConfig = {
     ],
   },
   serverExternalPackages: ['leaflet', 'react-leaflet'],
+  // Disable Turbopack - use Webpack for production build
+  experimental: {
+    turbo: {
+      build: false,
+    },
+  },
 }
 
 export default nextConfig
