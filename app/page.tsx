@@ -24,7 +24,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[#F8FAFC]">
-      <TransparentHeader />
+      <PublicHeader />
       {/* ── Hero với background gradient xanh lá rừng sẫm ── */}
       <section
         className="relative flex flex-col items-center justify-center overflow-hidden px-5 pt-32 pb-10 text-center"
