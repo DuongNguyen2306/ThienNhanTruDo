@@ -9,6 +9,7 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
+  serverExternalPackages: ['leaflet', 'react-leaflet'],
 }
 
 export default nextConfig
