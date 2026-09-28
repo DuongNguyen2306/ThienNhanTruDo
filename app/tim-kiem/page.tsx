@@ -2,16 +2,24 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, Suspense } from 'react'
+import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { Filter, MapPin } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MapBoard } from '@/components/map-board'
 import { PublicFooter, PublicHeader } from '@/components/shells'
-import { RealMap } from '@/components/RealMap'
 import { formatVnd, listings, totalMonthly } from '@/lib/data'
-import { Suspense } from 'react'
+
+const RealMap = dynamic(() => import('@/components/RealMap').then(m => ({ default: m.RealMap })), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[60vh] bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
+      Đang tải bản đồ...
+    </div>
+  ),
+})
 
 function SearchInner() {
   const params = useSearchParams()

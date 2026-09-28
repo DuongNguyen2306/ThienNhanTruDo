@@ -1,13 +1,22 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Building2, Search, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ListingCard } from '@/components/listing-card'
-import { PublicFooter, TransparentHeader } from '@/components/shells'
-import { RealMap } from '@/components/RealMap'
+import { PublicFooter, PublicHeader } from '@/components/shells'
 import { listings } from '@/lib/data'
+
+const RealMap = dynamic(() => import('@/components/RealMap').then(m => ({ default: m.RealMap })), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[60vh] bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
+      Đang tải bản đồ...
+    </div>
+  ),
+})
 
 export default function HomePage() {
   const router = useRouter()
