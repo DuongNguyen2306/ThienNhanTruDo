@@ -4,22 +4,42 @@ import { Eye, PhoneCall, BedDouble, Megaphone, WalletCards } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SellerLayout } from '@/components/seller-portal'
 import { PageHeader } from '@/components/portal-sidebar'
-import { listings } from '@/lib/data'
+import { sellerApi } from '@/lib/api'
+import { useEffect, useState } from 'react'
 
 export default function SellerDashboard() {
-  const mine = listings.filter((l) => l.sellerId === 's1')
-  const vacant = mine.filter((l) => l.vacantNow && l.status === 'active').length
-  const live = mine.filter((l) => l.status === 'active').length
-  const views = mine.reduce((s, l) => s + l.views, 0)
+  const [stats, setStats] = useState<{
+    listings: { draft: number; pending: number; active: number; rejected: number; inactive: number }
+    newLeads: number
+    pendingAppointments: number
+    totalViews: number
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    sellerApi.getDashboard()
+      .then(({ stats: data }) => {
+        setStats(data)
+        setLoading(false)
+      })
+      .catch(() => {
+        setLoading(false)
+      })
+  }, [])
+
+  const vacant = stats?.listings?.active ?? 0
+  const live = stats?.listings?.active ?? 0
+  const views = stats?.totalViews ?? 0
+  const leads = stats?.newLeads ?? 0
   return (
     <SellerLayout>
       <main className="flex flex-col gap-6">
         <PageHeader eyebrow="Cổng chủ trọ" title="Tổng quan chủ trọ" desc="Số phòng trống, tin đang hiển thị, lượt xem và yêu cầu hẹn xem phòng." />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat icon={BedDouble} label="Phòng trống" value={String(vacant)} />
-          <Stat icon={Megaphone} label="Tin đang hiển thị" value={String(live)} />
-          <Stat icon={Eye} label="Lượt xem" value={views.toLocaleString('vi-VN')} />
-          <Stat icon={PhoneCall} label="Yêu cầu hẹn xem" value="12" />
+          <Stat icon={BedDouble} label="Phòng trống" value={loading ? '...' : String(vacant)} />
+          <Stat icon={Megaphone} label="Tin đang hiển thị" value={loading ? '...' : String(live)} />
+          <Stat icon={Eye} label="Lượt xem" value={loading ? '...' : views.toLocaleString('vi-VN')} />
+          <Stat icon={PhoneCall} label="Yêu cầu hẹn xem" value={loading ? '...' : String(leads)} />
         </div>
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <Card className="rounded-2xl">

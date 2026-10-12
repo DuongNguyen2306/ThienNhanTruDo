@@ -1,5 +1,5 @@
-import { AuditHub } from '@/components/admin-portal'
+import { AuditLogPage } from '@/components/admin-portal'
 
 export default function AdminAuditPage() {
-  return <AuditHub />
+  return <AuditLogPage />
 }

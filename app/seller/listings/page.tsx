@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SellerLayout } from '@/components/seller-portal'
 import { PageHeader } from '@/components/portal-sidebar'
-import { listings, type ListingStatus } from '@/lib/data'
+import { sellerApi, type Listing, type ListingStatus } from '@/lib/api'
 
 const tabs: { id: ListingStatus | 'all'; label: string }[] = [
   { id: 'all', label: 'Tất cả' },
@@ -28,10 +28,38 @@ const statusLabel: Record<ListingStatus, string> = {
 
 export default function ListingManagementPage() {
   const [tab, setTab] = useState('all')
-  const [rows, setRows] = useState(listings.filter((l) => l.sellerId === 's1'))
-  const filtered = tab === 'all' ? rows : rows.filter((l) => l.status === tab)
+  const [listings, setListings] = useState<Listing[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const mark = (id: string, status: ListingStatus) => setRows((items) => items.map((l) => (l.id === id ? { ...l, status } : l)))
+  useEffect(() => {
+    sellerApi.getListings()
+      .then(({ listings: data }) => {
+        setListings(data)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const filtered = tab === 'all' ? listings : listings.filter((l) => l.status === tab)
+
+  const mark = async (id: string, status: ListingStatus) => {
+    try {
+      await sellerApi.updateListing(id, { status: status as 'active' | 'inactive' | 'draft' | 'pending' | 'rejected' })
+      setListings(listings.map((l) => l.id === id ? { ...l, status: status } : l))
+    } catch (err) {
+      console.error('Failed to update listing:', err)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Bạn có chắc muốn xóa tin này?')) return
+    try {
+      await sellerApi.deleteListing(id)
+      setListings(listings.filter((l) => l.id !== id))
+    } catch (err) {
+      console.error('Failed to delete listing:', err)
+    }
+  }
 
   return (
     <SellerLayout>
@@ -42,6 +70,9 @@ export default function ListingManagementPage() {
           desc="Ẩn/hiện, đánh dấu đã cho thuê, đẩy tin, sửa nội dung."
           actions={<Link href="/seller/listings/new" className="inline-flex h-9 items-center rounded-xl bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700">Tạo tin mới</Link>}
         />
+        {loading ? (
+          <div className="flex h-40 items-center justify-center text-slate-400">Đang tải...</div>
+        ) : (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-4 bg-slate-100">
             {tabs.map((t) => (
@@ -49,6 +80,12 @@ export default function ListingManagementPage() {
             ))}
           </TabsList>
           <TabsContent value={tab} className="mt-0 overflow-x-auto rounded-2xl border bg-white">
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <p>Chưa có tin đăng nào</p>
+                <Link href="/seller/listings/new" className="mt-2 text-emerald-600 hover:underline">Tạo tin mới</Link>
+              </div>
+            ) : (
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="border-b text-xs uppercase text-slate-400">
                 <tr>{['Tin', 'Trạng thái', 'Lượt xem', 'Thao tác'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr>
@@ -63,7 +100,7 @@ export default function ListingManagementPage() {
                         <span className="mt-1 block text-xs text-red-600" title={l.rejectReason}>Lý do: {l.rejectReason}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3"><Badge variant="outline">{statusLabel[l.status]}</Badge></td>
+                    <td className="px-4 py-3"><Badge variant="outline">{statusLabel[l.status as ListingStatus]}</Badge></td>
                     <td className="px-4 py-3">{l.views}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -72,15 +109,17 @@ export default function ListingManagementPage() {
                           {l.status === 'inactive' ? 'Hiện' : 'Ẩn'}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => mark(l.id, 'inactive')}>Đã cho thuê</Button>
-                        <Button size="sm" variant="outline">Đẩy tin</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleDelete(l.id)} className="text-red-600">Xóa</Button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            )}
           </TabsContent>
         </Tabs>
+        )}
       </main>
     </SellerLayout>
   )

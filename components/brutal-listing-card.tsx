@@ -1,0 +1,94 @@
+'use client'
+
+import Image from 'next/image'
+import Link from 'next/link'
+import { Heart, MapPin } from 'lucide-react'
+import { formatVnd, totalMonthly, type Listing } from '@/lib/data'
+
+interface BrutalListingCardProps {
+  listing: Listing
+  variant?: 'default' | 'featured'
+}
+
+export function BrutalListingCard({ listing, variant = 'default' }: BrutalListingCardProps) {
+  const total = totalMonthly(listing)
+
+  return (
+    <Link href={`/phong/${listing.id}`} className="group block">
+      <div className="overflow-hidden rounded-xl border-[2px] border-[#151515] bg-white shadow-[4px_4px_0_#151515] transition-all group-hover:translate-x-[-2px] group-hover:translate-y-[-2px] group-hover:shadow-[6px_6px_0_#151515]">
+        {/* Image Container */}
+        <div className="relative aspect-[4/3] overflow-hidden bg-[#F5F5F0]">
+          <Image
+            src={listing.image}
+            alt={listing.title}
+            fill
+            className="object-cover"
+            unoptimized
+          />
+          
+          {/* Badges */}
+          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+            {listing.verified && (
+              <span className="flex items-center gap-1 rounded-md bg-[#FDE047] px-2 py-1 text-[10px] font-bold text-[#151515] border-[1.5px] border-[#151515]">
+                <svg className="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/>
+                </svg>
+                Đã xác thực thực tế
+              </span>
+            )}
+            {listing.vip && (
+              <span className="rounded-md bg-[#151515] px-2 py-1 text-[10px] font-bold text-white border-[1.5px] border-[#151515]">
+                VIP
+              </span>
+            )}
+          </div>
+
+          {/* Heart Button */}
+          <button
+            type="button"
+            className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full border-[2px] border-[#151515] bg-white shadow-[2px_2px_0_#151515] transition-all hover:scale-110"
+            aria-label="Lưu tin"
+          >
+            <Heart className="size-4 text-[#151515]" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          <h3 className="font-bold leading-snug text-[#151515] line-clamp-1" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            {listing.title}
+          </h3>
+          
+          <div className="mt-1.5 flex items-center gap-1 text-xs text-[#151515]/60">
+            <MapPin className="size-3 shrink-0" />
+            <span className="truncate">{listing.district}, {listing.city}</span>
+          </div>
+
+          <div className="mt-2 flex items-baseline justify-between">
+            <div>
+              <span className="text-xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                {formatVnd(listing.rent)}
+              </span>
+              <span className="ml-1 text-xs font-medium text-[#151515]/50">/ tháng</span>
+            </div>
+            <span className="text-[11px] text-[#151515]/50">{listing.area} m²</span>
+          </div>
+
+          <div className="mt-3 rounded-lg bg-[#F5F5F0] px-3 py-2">
+            <div className="flex justify-between text-[11px]">
+              <span className="font-medium text-[#151515]/60">Tổng chi phí ước tính</span>
+              <span className="font-bold text-[#151515]">{formatVnd(total)}</span>
+            </div>
+          </div>
+
+          {/* Action Link */}
+          <div className="mt-3 flex items-center justify-end">
+            <span className="text-xs font-semibold text-[#151515] underline underline-offset-2">
+              Xem chi tiết →
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}

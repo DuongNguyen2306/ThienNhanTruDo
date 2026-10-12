@@ -11,7 +11,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { PortalSidebar, PageHeader } from '@/components/portal-sidebar'
 import { PortalShell } from '@/components/shells'
 import { sellerNav } from '@/lib/nav'
-import { formatVnd, packages } from '@/lib/data'
+import { formatVnd } from '@/lib/data'
+import { paymentApi, type Package, type Transaction } from '@/lib/api'
+import Link from 'next/link'
 
 export function SellerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -102,10 +104,22 @@ function MapPinBoard({ onChange }: { onChange: (lat: number, lng: number) => voi
       </div>
       <div className="flex items-center justify-between border-t bg-white/80 px-4 py-3 text-xs">
         <span className="flex items-center gap-2 text-slate-600">
-          <Navigation className="text-emerald-600" /> Đã ghim cửa/sảnh — không nhận địa chỉ “gần ngã tư X”
+          <Navigation className="text-emerald-600" /> Đã ghim cửa/sảnh — không nhận địa chỉ "gần ngã tư X"
         </span>
       </div>
     </div>
+  )
+}
+
+function Select({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="text-sm font-semibold">
+      {label}
+      <span className="relative mt-2 block">
+        <select className="h-11 w-full appearance-none rounded-xl border px-3 pr-8 font-normal">{children}</select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-3.5 size-4 text-slate-400" />
+      </span>
+    </label>
   )
 }
 
@@ -152,7 +166,7 @@ export function ListingWizard() {
                     <Select label="Phường/Xã"><option>Thảo Điền</option><option>An Phú</option><option>Tân Phong</option></Select>
                     <label className="text-sm font-semibold">Tên đường / số nhà<input className="mt-2 h-11 w-full rounded-xl border px-3 font-normal" placeholder="VD: 24B Nguyễn Văn Hưởng" /></label>
                   </div>
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Không cho phép địa chỉ chung chung kiểu “gần ngã tư X”. Phải chọn dropdown + ghim lat/long.</p>
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Không cho phép địa chỉ chung chung kiểu "gần ngã tư X". Phải chọn dropdown + ghim lat/long.</p>
                   <MapPinBoard onChange={(lat, lng) => setCoords([lat, lng])} />
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-slate-50 p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Vĩ độ</span><b className="mt-1 block font-mono text-sm">{coords[0].toFixed(6)}</b></div>
@@ -248,17 +262,84 @@ export function ListingWizard() {
 }
 
 export function BillingPage() {
-  const [selected, setSelected] = useState('vip')
+  const [packages, setPackages] = useState<Package[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [wallet, setWallet] = useState<{ balance: number; totalSpent: number } | null>(null)
+  const [selected, setSelected] = useState('')
   const [checkout, setCheckout] = useState(false)
+  const [paymentUrl, setPaymentUrl] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [processing, setProcessing] = useState(false)
   const [paid, setPaid] = useState(false)
   const [seconds, setSeconds] = useState(900)
+  const [txnRef, setTxnRef] = useState('')
+
+  useEffect(() => {
+    // Load packages, wallet and transactions
+    Promise.all([
+      paymentApi.getPackages(),
+      paymentApi.getWallet(),
+      paymentApi.getHistory(),
+    ])
+      .then(([pkgRes, walletRes, txRes]) => {
+        setPackages(pkgRes.packages)
+        setWallet(walletRes.wallet)
+        setTransactions(txRes.transactions)
+        if (pkgRes.packages.length > 0) {
+          setSelected(pkgRes.packages[0].id)
+        }
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
   useEffect(() => {
     if (!checkout || paid || seconds <= 0) return
-    const timer = setInterval(() => setSeconds((s) => s - 1), 1000)
+    const timer = setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000)
     return () => clearInterval(timer)
   }, [checkout, paid, seconds])
+
   const time = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
   const plan = packages.find((p) => p.id === selected)
+
+  const handlePayment = async () => {
+    if (!plan) return
+    setProcessing(true)
+    try {
+      const res = await paymentApi.createPayment(plan.price, plan.id, plan.name)
+      setPaymentUrl(res.paymentUrl)
+      setTxnRef(res.transactionId)
+      setCheckout(true)
+      setSeconds(900)
+      setPaid(false)
+    } catch (err) {
+      console.error('Payment error:', err)
+      alert('Không thể tạo thanh toán. Vui lòng thử lại.')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const simulateWebhook = async () => {
+    setPaid(true)
+    // Refresh wallet and transactions
+    const [walletRes, txRes] = await Promise.all([
+      paymentApi.getWallet(),
+      paymentApi.getHistory(),
+    ])
+    setWallet(walletRes.wallet)
+    setTransactions(txRes.transactions)
+  }
+
+  if (loading) {
+    return (
+      <SellerLayout>
+        <main className="flex h-96 items-center justify-center">
+          <p className="text-slate-400">Đang tải...</p>
+        </main>
+      </SellerLayout>
+    )
+  }
 
   return (
     <SellerLayout>
@@ -268,13 +349,31 @@ export function BillingPage() {
           <h1 className="mt-4 text-4xl font-bold">Bảng giá dịch vụ</h1>
           <p className="mt-3 text-slate-500">Tin thường, Tin VIP (đẩy đầu trang), Gói xác minh tận nơi do Manager đến chụp.</p>
         </div>
+
+        {wallet && (
+          <div className="mx-auto mt-6 max-w-3xl">
+            <Card className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
+              <CardContent className="flex items-center justify-between p-6">
+                <div>
+                  <p className="text-sm opacity-80">Số dư ví</p>
+                  <p className="mt-1 font-mono text-3xl font-bold">{formatVnd(wallet.balance)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm opacity-80">Đã chi tiêu</p>
+                  <p className="mt-1 font-mono text-xl font-bold">{formatVnd(wallet.totalSpent)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         <div className="mx-auto mt-10 grid max-w-6xl gap-5 lg:grid-cols-3">
           {packages.map((p) => (
             <Card key={p.id} className={`relative flex flex-col rounded-2xl ${selected === p.id ? 'ring-2 ring-emerald-500' : ''}`}>
               {p.popular && <Badge className="absolute -top-3 left-5 bg-emerald-600">Phổ biến</Badge>}
               <CardHeader>
                 <CardTitle>{p.name}</CardTitle>
-                <CardDescription>{p.desc}</CardDescription>
+                <CardDescription>{p.features.join(' · ')}</CardDescription>
                 <p className="pt-3 font-mono text-3xl font-bold">{formatVnd(p.price)}</p>
               </CardHeader>
               <CardContent className="flex-1">
@@ -283,29 +382,49 @@ export function BillingPage() {
                 ))}
               </CardContent>
               <CardFooter>
-                <Button className="w-full rounded-xl bg-emerald-600" onClick={() => { setSelected(p.id); setCheckout(true); setPaid(false) }}>
-                  Thanh toán VNPay
+                <Button className="w-full rounded-xl bg-emerald-600" onClick={() => { setSelected(p.id); handlePayment() }} disabled={processing}>
+                  {processing ? 'Đang xử lý...' : 'Thanh toán VNPay'}
                 </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
+
         <Card className="mx-auto mt-10 max-w-6xl rounded-2xl">
           <CardHeader>
-            <CardTitle>Lịch sử giao dịch & số dư ví</CardTitle>
-            <CardDescription>Số dư hiện tại: 1.250.000đ · 8 lượt đăng tin còn lại</CardDescription>
+            <CardTitle>Lịch sử giao dịch</CardTitle>
+            <CardDescription>Tất cả giao dịch thanh toán qua VNPay</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-slate-400"><tr>{['Mã đơn', 'Gói', 'Số tiền', 'Cổng', 'Trạng thái'].map((h) => <th key={h} className="py-2">{h}</th>)}</tr></thead>
-              <tbody>
-                <tr className="border-t"><td className="py-3 font-mono">VR-2026-0819</td><td>Tin VIP</td><td>299.000đ</td><td>VietQR</td><td>Thành công</td></tr>
-                <tr className="border-t"><td className="py-3 font-mono">VR-2026-0801</td><td>Xác minh tận nơi</td><td>799.000đ</td><td>VNPay-QR</td><td>Thành công · Tải hóa đơn</td></tr>
-              </tbody>
-            </table>
+            {transactions.length === 0 ? (
+              <p className="py-8 text-center text-slate-400">Chưa có giao dịch nào</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase text-slate-400">
+                  <tr>{['Mã đơn', 'Loại', 'Số tiền', 'Cổng', 'Trạng thái', 'Ngày'].map((h) => <th key={h} className="py-2 pr-4">{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {transactions.map((t) => (
+                    <tr key={t.id} className="border-t">
+                      <td className="py-3 pr-4 font-mono text-xs">{t.vnpayTxRef || t.id.slice(0, 12)}</td>
+                      <td className="py-3 pr-4">{t.description || t.type}</td>
+                      <td className="py-3 pr-4 font-mono">{formatVnd(t.amount)}</td>
+                      <td className="py-3 pr-4">{t.method === 'vnpay' ? 'VNPay' : t.method}</td>
+                      <td className="py-3 pr-4">
+                        <Badge variant={t.status === 'completed' ? 'default' : 'outline'} className={t.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : ''}>
+                          {t.status === 'completed' ? 'Thành công' : t.status === 'pending' ? 'Đang xử lý' : 'Thất bại'}
+                        </Badge>
+                      </td>
+                      <td className="py-3 pr-4 text-slate-500">{new Date(t.createdAt).toLocaleDateString('vi-VN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </CardContent>
         </Card>
       </main>
+
       {checkout && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
           <Card className="w-full max-w-2xl rounded-2xl">
@@ -321,40 +440,40 @@ export function BillingPage() {
                 <div className={`flex items-center gap-3 rounded-xl border p-4 ${paid ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                   {paid ? <CheckCircle2 className="text-emerald-600" /> : <Clock3 className="animate-pulse text-amber-600" />}
                   <div>
-                    <b>{paid ? 'Thanh toán thành công (Webhook)' : 'Đang chờ thanh toán...'}</b>
+                    <b>{paid ? 'Thanh toán thành công!' : 'Đang chờ thanh toán...'}</b>
                     <span className="block text-xs">{paid ? 'Số dư/gói tin đã được cộng.' : `QR hết hạn sau ${time}`}</span>
                   </div>
                 </div>
                 <div className="rounded-xl border p-4 text-sm">
-                  <div className="flex justify-between"><span>Mã đơn</span><b className="font-mono">VR-2026-0928</b></div>
+                  <div className="flex justify-between"><span>Mã đơn</span><b className="font-mono">{txnRef}</b></div>
                   <div className="mt-2 flex justify-between"><span>{plan?.name}</span><b>{plan ? formatVnd(plan.price) : ''}</b></div>
                 </div>
-                <p className="flex gap-2 text-xs text-slate-400"><Info className="size-4" /> Trạng thái polling realtime: chờ cổng VNPay / webhook backend.</p>
+                {!paid && (
+                  <Button variant="outline" className="w-full" onClick={() => window.open(paymentUrl, '_blank')}>
+                    Mở trang thanh toán VNPay
+                  </Button>
+                )}
+                <p className="flex gap-2 text-xs text-slate-400"><Info className="size-4" /> Quét mã QR bằng app ngân hàng hoặc ví điện tử để thanh toán.</p>
               </div>
               <div className="flex flex-col items-center gap-3">
                 <div className="flex aspect-square w-full items-center justify-center rounded-2xl border-8 border-slate-100 bg-slate-950 text-white">
                   <QrCode className="size-28" />
                 </div>
-                <Button variant="outline" size="sm" className="w-full" onClick={() => setPaid(true)}>
-                  {paid ? 'Đã thanh toán' : 'Mô phỏng webhook thành công'}
-                </Button>
+                {!paid && (
+                  <Button variant="outline" size="sm" className="w-full" onClick={simulateWebhook}>
+                    Mô phỏng thanh toán thành công
+                  </Button>
+                )}
+                {paid && (
+                  <Button className="w-full bg-emerald-600" onClick={() => setCheckout(false)}>
+                    Hoàn tất
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
       )}
     </SellerLayout>
-  )
-}
-
-function Select({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="text-sm font-semibold">
-      {label}
-      <span className="relative mt-2 block">
-        <select className="h-11 w-full appearance-none rounded-xl border px-3 pr-8 font-normal">{children}</select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-3.5 size-4 text-slate-400" />
-      </span>
-    </label>
   )
 }

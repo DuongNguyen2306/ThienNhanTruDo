@@ -1,0 +1,290 @@
+
+================================================================================================SCREEN UI-01 — HOMEPAGE
+ROUTE: /
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Design a usable marketplace homepage, not a promotional poster. Keep the shared header exactly as defined, with "Trang chủ" active. Directly under the header, create a large yet practical two-column hero: left column oversized heading "TÌM PHÒNG THẬT — THUÊ AN TÂM", a concise explanation about clear rental information and verified listings, and right column a large authentic Vietnamese apartment photograph framed by a thick black border. Place a prominent, usable location search module across the hero bottom with label "Bạn muốn tìm phòng ở đâu?", district/location field, room type selector and yellow "Tìm phòng ngay" button. Below, add a horizontal row of room-type shortcuts: "Phòng trọ", "Chung cư mini", "Căn hộ dịch vụ", "Ký túc xá".
+Show "PHÒNG NỔI BẬT" with three consistent photographic ListingCards in one row; each card includes Vietnamese room title, district, square meters, bold monthly VNĐ rent, heart icon, verification badge only when applicable, and "Xem chi tiết" action. Add a compact trust strip for "Giá thuê rõ ràng", "Hình ảnh thực tế", "Thông tin xác minh". End the visible viewport with a clean secondary CTA "Bạn có phòng muốn đăng?" and "Đăng tin" button. Maintain generous whitespace and precise component geometry; avoid excessive decorative stickers or unsupported statistics. Fit the essential hero, search, shortcuts and first listing row legibly into the 1440×900 viewport.
+
+
+SCREEN UI-02 — ROOM SEARCH RESULTS
+ROUTE: /tim-kiem
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+Design a practical room search results page for Vietnamese renters. Keep the shared header unchanged. Below it, a prominent page heading "TÌM PHÒNG PHÙ HỢP VỚI BẠN" and a wide search bar containing a location field and search button.
+
+Use a desktop two-column structure: a 290px left filter sidebar and a wider listing results area. The left sidebar has grouped filters: "Loại phòng" with Phòng trọ / Chung cư mini / Căn hộ dịch vụ / Ký túc xá; "Khoảng giá" with a dual-handle price slider and VNĐ values; "Diện tích" with min/max controls; "Tiện ích" checkboxes for Máy lạnh, Thang máy, Nội thất, Cho nuôi thú cưng; plus "Đã xác minh" and "Trống ngay" toggles. Include "Áp dụng bộ lọc" and "Xóa bộ lọc" actions.
+
+The right area shows a sample results count, sorting dropdown with "Giá thấp đến cao", "Mới nhất", "Xem nhiều", and a 3-column grid of attractive property listing cards. Cards contain authentic apartment photos, sample VNĐ rent per month, size, location, verification status, favorites and an obvious "Xem chi tiết" action. Include pagination at the bottom of the longer page.
+
+Design highly legible filters, consistent card dimensions, visually balanced spacing, yellow active states, thick black borders and precise hard shadows. Make it feel like a working property search product, not a promotional poster.
+
+
+SCREEN UI-03 — ROOM DETAIL
+ROUTE: /tim-kiem/[id]
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Create a realistic property detail page for a specific example Vietnamese rental room. Keep the shared header unchanged and "Tìm phòng" active. Begin with breadcrumb "Trang chủ / Tìm phòng / Chi tiết phòng", large room title, district and address, a small verified badge if appropriate, heart-save icon and share icon. Use a premium, functional photo slider/gallery with one large photo and smaller supporting images showing room, bathroom, balcony and meter. Gallery controls must be visible and usable.
+Under the gallery use a two-column content layout: wide left details column and approximately 340px right booking sidebar. LEFT: prominent rental price per month in VNĐ, room type, area in m², availability, "Thông tin phòng", "Tiện ích" with icon chips, and a transparent fee breakdown table for "Giá thuê", "Tiền cọc", "Điện/kWh", "Nước", "Internet", "Giữ xe", "Phí quản lý" using plausible example values. Then show a map preview with address and pin, followed by "Đánh giá" with concise review cards and a "Báo cáo tin đăng" action. RIGHT: a high-contrast sticky booking card containing rent, compact summary, yellow "Hẹn xem" button that clearly opens the appointment modal, and a secondary contact/request-information action. Keep the visible 1440×900 composition balanced; lower sections can continue below the fold, without shrinking text to fit everything. Do not imply a completed booking or live listing data.
+
+
+SCREEN UI-04 — APPOINTMENT MODAL
+ROUTE: /tim-kiem/[id] — modal
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Show the room detail page behind a subtly dimmed overlay, with a centered OPEN appointment modal as the clear focus. The underlying shared header and room gallery must remain recognizable and consistent. Use a white modal approximately 620px wide, thick black border, 5px hard offset shadow, strong heading "ĐẶT LỊCH XEM PHÒNG", clear X close control, and a small property preview row with room thumbnail, name, location and example monthly rent.
+The appointment form must include "Ngày muốn xem" with an accessible date picker, "Giờ muốn xem" with selectable time chips, "Số điện thoại" input ONLY when the visitor is not logged in (this mockup shows a logged-out visitor), and optional "Ghi chú" textarea. Make required labels clear, show one selected day and time in yellow, and include a brief non-guaranteed explanation "Yêu cầu của bạn sẽ được gửi đến chủ đăng tin". Bottom action row: white outlined "Hủy" and yellow "Gửi yêu cầu". Do not show payment, deposits, instant confirmation or unnecessary fields. Render a credible real product interaction, not a standalone form poster.
+
+
+SCREEN UI-05 — LOGIN — PASSWORD TAB
+ROUTE: /dang-nhap
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Create the login screen specified for the marketplace. Use a polished 45/55 split layout while retaining the exact same brand wordmark, color system, and header proportions. Left yellow brand panel: strong heading "TÌM PHÒNG THẬT — THUÊ ĐÚNG NGƯỜI", brief value proposition, simple flat two-dimensional building-and-map-pin line illustration, and restrained trust messages about listing review and phone verification. Avoid unsupported number-one claims and fake testimonials.
+Right white form panel: heading "ĐĂNG NHẬP", two clearly visible tabs "ĐT + Mật khẩu" and "OTP", with "ĐT + Mật khẩu" selected in yellow. Show labeled "Số điện thoại" and "Mật khẩu" fields, a password visibility eye icon, "Quên mật khẩu?" link, prominent yellow "Đăng nhập" button, and "Chưa có tài khoản? Đăng ký" footer link. Keep field sizes realistic and all Vietnamese copy crisp. Do not simultaneously display OTP fields on this screen. Use generous spacing, high contrast, practical validation space, and authentic application UI rather than a landing page.
+
+
+SCREEN UI-06 — LOGIN — OTP TAB
+ROUTE: /dang-nhap — OTP
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Create the alternate state of exactly the SAME login page as UI-05: same split composition, same yellow left branding panel, same logo, identical header, dimensions, text hierarchy, colors, illustration, and form card geometry. On the right, the tabs "ĐT + Mật khẩu" and "OTP" remain in precisely the same positions, but "OTP" is the active yellow tab.
+Show the OTP sign-in flow in a realistic intermediate state: labeled "Số điện thoại" field with example Vietnamese mobile number, outlined "Gửi mã OTP" action, a clearly separated six-digit verification input row with six equal boxes, a modest resend-code hint, and yellow "Xác minh & Đăng nhập" button. Include "Quay lại" or a clear option to edit phone number. Do not show a fictional delivered code or completed verification. No password field on this tab. This must look like a true state variation of UI-05, not a redesigned page.
+
+
+SCREEN UI-07 — REGISTER — TENANT
+ROUTE: /dang-ky
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Design the registration screen with consistent brand header and a centered wide white outlined form card on warm off-white background. Heading "TẠO TÀI KHOẢN" and a short explanation. At the top show two selectable role cards: "Người thuê" with simple line icon and "Chủ đăng tin" with simple building icon; "Người thuê" is selected with yellow fill and strong black outline.
+Below, show labeled registration fields arranged in a sensible responsive-ready two-column desktop form: "Họ và tên", "Số điện thoại", "Email", "Mật khẩu", "Xác nhận mật khẩu". Show eye icons for password fields, visible required indicators, unobtrusive validation/helper text, yellow "Tạo tài khoản" CTA, and "Đã có tài khoản? Đăng nhập" link. Do NOT show seller-only fields on the tenant-selected state. No invented third-party login. Keep the form approachable and real, with large usable inputs and uncluttered margins.
+
+
+SCREEN UI-08 — REGISTER — SELLER SELECTED
+ROUTE: /dang-ky — seller role
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Create an alternate selected state of exactly the same registration page as UI-07. Preserve the same header, logo, card width, role selector, typography, input style, color palette, borders and shadows. Here "Chủ đăng tin" is selected in yellow and "Người thuê" is unselected.
+Display the shared account fields "Họ và tên", "Số điện thoại", "Email", "Mật khẩu", "Xác nhận mật khẩu" plus the seller-only fields explicitly required by the flow: "CCCD", "Tên thương hiệu", "Địa chỉ". Group seller-only inputs beneath a subtle subheading "Thông tin chủ đăng tin". Add a concise note that seller accounts await review before full posting access, with neutral informational styling. Primary yellow "Tạo tài khoản" button and secondary "Đăng nhập" link. Maintain readable spacing and avoid squeezing fields; show the beginning of the longer form naturally within 1440×900 rather than crop elements arbitrarily. No identity-document upload control unless separately specified.
+
+
+SCREEN UI-09 — FORGOT PASSWORD
+ROUTE: /quen-mat-khau
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Design a restrained password recovery screen in the same marketplace design system. The route exists in the product spec, but its precise recovery steps are not specified, so present a clear neutral first-step UI concept without claiming a defined backend behavior. Use the shared brand logo and navigation styling; warm off-white background and a centered white bordered form panel with hard black shadow. Heading "QUÊN MẬT KHẨU?", concise text "Nhập số điện thoại đã đăng ký để tiếp tục", labeled "Số điện thoại" input, yellow "Tiếp tục" button and secondary "Quay lại đăng nhập" link. A small privacy reminder says "Không chia sẻ mã xác minh với người khác". Keep all labels natural Vietnamese and do not show a successful SMS notification, fake OTP, or invented password-reset mechanism.
+
+
+SCREEN UI-10 — TENANT ACCOUNT DASHBOARD
+ROUTE: /tai-khoan
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Create the signed-in tenant account overview page. Preserve the shared header exactly but replace "Đăng nhập" and "Đăng ký" with a small user avatar and menu, as the global rules require. Use a 250px account sidebar with avatar/name, active "Tổng quan" item highlighted yellow, and links "Thông tin cá nhân", "Lịch hẹn xem", "Phòng đã lưu", "Đăng xuất". Main heading "TÀI KHOẢN CỦA TÔI" and a simple greeting.
+Show a realistic profile card with name, telephone and email, plus "Chỉnh sửa thông tin" action. Beside it show two compact stat cards for "Lịch hẹn xem" and "Phòng đã lưu" with sample counts. Beneath, show "Lịch hẹn gần đây" as 2 rows with room thumbnail, date/time and status, and "Phòng quan tâm" with two compact ListingCards and saved heart states. Include clear links to "Xem tất cả lịch hẹn" and "Xem phòng đã lưu". Avoid seller metrics, payments, wallet balance, contracts or unrelated features. Use precise grid alignment and authentic Vietnamese UI.
+
+
+SCREEN UI-11 — TENANT APPOINTMENT HISTORY
+ROUTE: /tai-khoan/lich-hen
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Design the signed-in tenant appointment history page. Keep the exact same signed-in header and tenant sidebar from UI-10; highlight "Lịch hẹn xem" in yellow. Main heading "LỊCH HẸN XEM", supporting sentence about managing room-viewing requests. Provide simple filter tabs "Tất cả", "Đang chờ", "Đã xác nhận", "Đã hủy" as visual example statuses, and a clear appointment list.
+Each row/card shows an authentic room thumbnail, room name, location, requested date, time, small status badge, and "Xem phòng" link. On a pending appointment show a restrained red-outline "Hủy lịch hẹn" action consistent with the DELETE appointment endpoint. Show three example appointments with distinct sample statuses; do not pretend they are real bookings. Include a small neutral note that appointments depend on the host's response. No reschedule action, payment flow or unimplemented features. Maintain readable status colors, 3px borders, hard shadows and comfortable row height.
+
+
+SCREEN UI-12 — TENANT SAVED LISTINGS
+ROUTE: /tai-khoan/da-luu
+
+GLOBAL DESIGN SYSTEM — THIÊN DỮ TRÚ ĐỒ
+
+Create a high-fidelity, production-ready desktop website UI screenshot for "THIÊN DỮ TRÚ ĐỒ", a Vietnamese verified room rental marketplace.
+
+VISUAL IDENTITY:
+Neo Brutalism, modern and sophisticated rather than chaotic. Primary yellow #FDE047, ink black #151515, white #FFFFFF, warm off-white #F5F5F0. Use Be Vietnam Pro typography with Vietnamese diacritics. Extra-bold display headings, 2–3px black outlines, 8–12px corner radii, 5px hard offset shadows, spacious 12-column layout, crisp icons, strong hierarchy, consistent component spacing.
+
+SHARED HEADER:
+Identical logo wordmark "THIÊN DỮ TRÚ ĐỒ" with a geometric roof and location pin icon, at the top-left. Navigation: "Trang chủ", "Tìm phòng", "Phòng đã lưu", "Đăng tin". Right: "Đăng nhập" and a yellow "Đăng ký" button. For signed-in tenant screens replace auth buttons with a small avatar and user menu. Active navigation has yellow highlight.
+
+DESIGN RULES:
+1440×900 desktop screenshot, straight-on full-width website interface. Authentic Vietnamese room and apartment photography. Strong readable VNĐ prices. Yellow primary buttons, white secondary buttons, black borders, black offset shadows. Verified status uses a clear badge and checkmark. Red reserved for destructive errors, green for successful actions. All visible copy in natural, correctly accented Vietnamese. Use realistic illustrative example data, never imply the mockup data is live.
+
+CONSISTENCY:
+Keep the exact same logo, brand colors, typography, header proportions, icon style, buttons, cards, and border treatment across all screens. Functional, accessible, professionally designed marketplace UI. No device mockups, perspective distortion, 3D illustrations, watermarks, lorem ipsum, random English labels or cropped elements.
+
+SCREEN-SPECIFIC DESIGN:
+Create the signed-in tenant saved listings page, preserving the exact same signed-in header and tenant sidebar from UI-10 and UI-11; highlight "Phòng đã lưu" in yellow. Main heading "PHÒNG ĐÃ LƯU", concise subtitle, sample saved-listing count and a clear secondary "Tiếp tục tìm phòng" action.
+Show a balanced 3-column grid of six saved ListingCards with consistent card dimensions, real-looking Vietnamese room photos, bold monthly VNĐ rent, room title, district/ward, m², verified badge only when applicable, and filled heart save control with clear remove-saved affordance. Each card has an obvious "Xem chi tiết" action. Include one small note that availability and prices may change. Use realistic varied example properties, high legibility, generous spacing, yellow action accents, 2–3px black borders, hard shadows, and no unrelated comparison or payment feature.

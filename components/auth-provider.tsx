@@ -4,6 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import {
   DEMO_ACCOUNTS, findAccountById, parseSession, SESSION_COOKIE, toSession, type AccountRecord, type Role, type SessionUser,
 } from '@/lib/auth'
+import { authApi, type SessionUser as ApiSessionUser } from './api'
+
+// Set to false to use real backend API
+const USE_DEMO_MODE = process.env.NEXT_PUBLIC_USE_DEMO_MODE !== 'false'
 
 type RegisterPayload = {
   fullName: string
@@ -17,17 +21,15 @@ type RegisterPayload = {
 type AuthContextValue = {
   user: SessionUser | null
   ready: boolean
-  /** Bản gốc tài khoản (có password, otp) — dùng cho login/dev. */
   accounts: AccountRecord[]
   login: (user: SessionUser) => void
   loginById: (id: string) => void
   logout: () => void
-  register: (payload: RegisterPayload) => { ok: true; account: AccountRecord } | { ok: false; error: string }
+  register: (payload: RegisterPayload) => Promise<{ ok: true; account: AccountRecord } | { ok: false; error: string }>
   updateAccount: (id: string, patch: Partial<AccountRecord>) => void
-  /** Demo: cập nhật role ngay cho user đang đăng nhập (không cần re-login) */
   switchRole: (role: Role) => void
-  /** Đăng xuất tất cả thiết bị (xoá tất cả session đã ghi) */
   signOutEverywhere: () => void
+  isDemoMode: boolean
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -37,14 +39,16 @@ const AuthContext = createContext<AuthContextValue>({
   login: () => {},
   loginById: () => {},
   logout: () => {},
-  register: () => ({ ok: false as const, error: 'Chưa sẵn sàng' }),
+  register: async () => ({ ok: false as const, error: 'Chưa sẵn sàng' }),
   updateAccount: () => {},
   switchRole: () => {},
   signOutEverywhere: () => {},
+  isDemoMode: USE_DEMO_MODE,
 })
 
 const ACCOUNTS_KEY = 'thiennhan_accounts'
 const CURRENT_KEY = 'thiennhan_current'
+const TOKEN_KEY = 'token'
 
 function writeCookie(value: string | null) {
   if (typeof document === 'undefined') return
@@ -62,7 +66,6 @@ function readAccountStore(): AccountRecord[] {
     if (!raw) return DEMO_ACCOUNTS
     const parsed = JSON.parse(raw) as AccountRecord[]
     if (!Array.isArray(parsed) || parsed.length === 0) return DEMO_ACCOUNTS
-    // Bảo đảm luôn có đủ tài khoản demo mặc định
     const ids = new Set(parsed.map((a) => a.id))
     const merged = [...parsed]
     for (const acc of DEMO_ACCOUNTS) {
@@ -95,6 +98,31 @@ function readUserFromStores(): SessionUser | null {
   return parseSession(id)
 }
 
+// Convert API user to SessionUser
+function apiUserToSession(apiUser: ApiSessionUser): SessionUser {
+  return {
+    id: apiUser.id,
+    role: apiUser.role,
+    fullName: apiUser.fullName,
+    name: apiUser.name,
+    email: apiUser.email,
+    phone: apiUser.phone,
+    initials: apiUser.initials,
+    title: apiUser.title,
+    sellerStatus: apiUser.sellerStatus ?? 'none',
+    sellerProfile: apiUser.sellerProfile ? {
+      idNumber: apiUser.sellerProfile.idNumber ?? '',
+      brand: apiUser.sellerProfile.brand,
+      address: apiUser.sellerProfile.address ?? '',
+      docs: apiUser.sellerProfile.docs ?? [],
+      submittedAt: apiUser.sellerProfile.submittedAt ?? '',
+      reviewedAt: apiUser.sellerProfile.reviewedAt,
+      reviewer: apiUser.sellerProfile.reviewer,
+      reviewNote: apiUser.sellerProfile.reviewNote,
+    } : undefined,
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accounts, setAccounts] = useState<AccountRecord[]>(DEMO_ACCOUNTS)
   const [user, setUser] = useState<SessionUser | null>(null)
@@ -102,7 +130,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setAccounts(readAccountStore())
-    setUser(readUserFromStores())
+
+    // Check for existing API token
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (token && !USE_DEMO_MODE) {
+      // Try to fetch user from API
+      authApi.getMe()
+        .then(({ user: apiUser }) => {
+          setUser(apiUserToSession(apiUser))
+        })
+        .catch(() => {
+          // Token invalid, try demo mode
+          setUser(readUserFromStores())
+        })
+    } else {
+      setUser(readUserFromStores())
+    }
+
     setReady(true)
   }, [])
 
@@ -125,7 +169,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login(toSession(acc))
   }, [login])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (!USE_DEMO_MODE) {
+      try {
+        await authApi.logout()
+      } catch {
+        // Ignore errors
+      }
+      localStorage.removeItem(TOKEN_KEY)
+    }
+
     writeCookie(null)
     if (typeof window !== 'undefined') localStorage.removeItem(CURRENT_KEY)
     setUser(null)
@@ -133,13 +186,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOutEverywhere = useCallback(() => {
     if (typeof window === 'undefined') return
-    // Cookie đã có max-age=0, giờ quét thêm các token session khác nếu có
     document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0; SameSite=Lax`
     localStorage.removeItem(CURRENT_KEY)
+    localStorage.removeItem(TOKEN_KEY)
     setUser(null)
   }, [])
 
-  const register = useCallback<AuthContextValue['register']>((payload) => {
+  const register = useCallback(async (payload: RegisterPayload) => {
+    if (!USE_DEMO_MODE) {
+      try {
+        const { user: apiUser, token } = await authApi.register({
+          phone: payload.phone.replace(/\s/g, ''),
+          password: payload.password,
+          fullName: payload.fullName,
+          email: payload.email,
+          role: payload.role,
+        })
+        localStorage.setItem(TOKEN_KEY, token)
+        setUser(apiUserToSession(apiUser))
+        return { ok: true, account: DEMO_ACCOUNTS[0] }
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err.message : 'Đăng ký thất bại'
+        return { ok: false, error }
+      }
+    }
+
+    // Demo mode registration
     const phone = payload.phone.replace(/\s/g, '')
     if (phone.length < 9) return { ok: false, error: 'Số điện thoại không hợp lệ' }
     if (payload.password.length < 8 || !/[A-Z]/.test(payload.password) || !/\d/.test(payload.password)) {
@@ -164,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: payload.email,
       phone: payload.phone,
       password: payload.password,
-      otp: DEMO_OTP_FALLBACK,
+      otp: '123456',
       initials: initials || 'NV',
       title: payload.role === 'seller' ? 'Chủ đăng tin (chờ duyệt)' : 'Người thuê',
       sellerStatus: payload.role === 'seller' ? 'pending' : 'none',
@@ -172,8 +244,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString().slice(0, 10),
     }
     persist([newAccount, ...store])
+    login(toSession(newAccount))
     return { ok: true, account: newAccount }
-  }, [persist])
+  }, [persist, login])
 
   const updateAccount = useCallback((id: string, patch: Partial<AccountRecord>) => {
     const store = readAccountStore()
@@ -198,14 +271,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [persist, user])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, ready, accounts, login, loginById, logout, register, updateAccount, switchRole, signOutEverywhere }),
+    () => ({
+      user,
+      ready,
+      accounts,
+      login,
+      loginById,
+      logout,
+      register,
+      updateAccount,
+      switchRole,
+      signOutEverywhere,
+      isDemoMode: USE_DEMO_MODE,
+    }),
     [user, ready, accounts, login, loginById, logout, register, updateAccount, switchRole, signOutEverywhere],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
-
-const DEMO_OTP_FALLBACK = '123456'
 
 export function useAuth() {
   return useContext(AuthContext)

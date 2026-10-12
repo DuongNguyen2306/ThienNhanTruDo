@@ -1,5 +1,5 @@
-import { UsersHub } from '@/components/admin-portal'
+import { UserManagementPage } from '@/components/admin-portal'
 
 export default function AdminUsersPage() {
-  return <UsersHub />
+  return <UserManagementPage />
 }

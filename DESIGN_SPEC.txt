@@ -1,0 +1,1030 @@
+# THIÊN NHÃN TRÚ ĐỒ - DESIGN SPEC & FLOW DOCUMENT
+
+## MỤC LỤC
+1. USER FLOWS (Luồng người dùng)
+2. MÀN HÌNH CHỨC NĂNG
+3. UI ELEMENTS & COMPONENTS
+4. API ENDPOINTS
+
+================================================================================
+1. USER FLOWS (LUỒNG NGƯỜI DÙNG)
+================================================================================
+
+--------------------------------------------------------------------------------
+FLOW 1: ĐĂNG NHẬP / ĐĂNG KÝ
+--------------------------------------------------------------------------------
+Bước 1: Mở trang /dang-nhap
+         → Hiển thị form đăng nhập với 2 tabs: "ĐT + Mật khẩu" | "OTP"
+         
+Bước 2a (Đăng nhập mật khẩu):
+         - Nhập số điện thoại → enter
+         - Nhập mật khẩu → enter
+         - Click "Đăng nhập"
+         - Gọi API: POST /api/auth/login
+         - Lưu token vào localStorage
+         - Redirect theo role:
+           * tenant → /tai-khoan
+           * seller → /seller
+           * manager → /manager/approvals
+           * admin → /admin
+
+Bước 2b (Đăng nhập OTP):
+         - Nhập số điện thoại
+         - Click "Gửi mã OTP"
+         - Gọi API: POST /api/auth/otp/send
+         - Nhập mã OTP (6 số)
+         - Click "Xác minh & Đăng nhập"
+         - Gọi API: POST /api/auth/otp/verify
+         - Redirect theo role
+
+Bước 3: Đăng ký mới (/dang-ky)
+         - Nhập: Họ tên, SĐT, Email, Mật khẩu, Xác nhận mật khẩu
+         - Chọn vai trò: "Người thuê" | "Chủ đăng tin"
+         - Nếu chọn "Chủ đăng tin" → thêm form: CCCD, Tên thương hiệu, Địa chỉ
+         - Click "Tạo tài khoản"
+         - Gọi API: POST /api/auth/register
+         - Redirect sang trang chờ duyệt (seller) hoặc đăng nhập (tenant)
+
+--------------------------------------------------------------------------------
+FLOW 2: NGƯỜI THUÊ (TENANT)
+--------------------------------------------------------------------------------
+A. Tìm kiếm & Xem phòng
+   Bước 1: /tim-kiem
+            - Thanh tìm kiếm (địa điểm)
+            - Bộ lọc: Loại phòng, Giá, Diện tích, Tiện ích
+            - Grid hiển thị ListingCard
+            - Gọi API: GET /api/listings?{params}
+            
+   Bước 2: /tim-kiem/[id]
+            - Chi tiết tin đăng
+            - Ảnh slider
+            - Thông tin: giá, địa chỉ, tiện ích
+            - Map vị trí
+            - Reviews
+            - Nút "Hẹn xem" → mở modal
+            
+   Bước 3: Modal hẹn xem
+            - Chọn ngày/giờ
+            - Nhập SĐT (nếu chưa đăng nhập)
+            - Nhập ghi chú
+            - Click "Gửi yêu cầu"
+            - Gọi API: POST /api/tenant/appointments
+
+B. Tài khoản (/tai-khoan)
+   - Thông tin cá nhân
+   - Lịch sử hẹn xem
+   - Tin đã lưu
+   - Đăng xuất
+
+--------------------------------------------------------------------------------
+FLOW 3: CHỦ ĐĂNG TIN (SELLER)
+--------------------------------------------------------------------------------
+A. Dashboard (/seller)
+   - Stats cards: Phòng trống, Tin đang hiển thị, Lượt xem, Yêu cầu hẹn xem
+   - Thông báo duyệt bài
+   - Số dư ví & gói tin
+   - Gọi API: GET /api/seller/dashboard
+
+B. Quản lý tin (/seller/listings)
+   - Tabs: Tất cả | Nháp | Chờ duyệt | Đang hiển thị | Bị từ chối | Tạm ẩn
+   - Table với columns: Tin, Trạng thái, Lượt xem, Thao tác
+   - Actions: Sửa, Hiện/Ẩn, Đã cho thuê, Xóa
+   - Nút "Tạo tin mới" → /seller/listings/new
+   - Gọi API: GET /api/seller/listings
+
+C. Tạo/Chỉnh sửa tin (/seller/listings/new hoặc /seller/listings/[id]/edit)
+   Wizard 4 bước:
+   
+   Bước 1 - Địa chỉ:
+   - Dropdown: Tỉnh/Thành, Quận/Huyện, Phường/Xã
+   - Input: Số nhà, Tên đường
+   - Bản đồ tương tác (kéo đánh dấu vị trí)
+   - Hiển thị lat/lng
+   
+   Bước 2 - Biểu phí:
+   - Giá thuê/tháng (required)
+   - Tiền cọc
+   - Điện/kWh (required)
+   - Nước/tháng (required)
+   - Internet, Phí giữ xe, Phí quản lý
+   - Nút "0đ" để set miễn phí
+   
+   Bước 3 - Hình ảnh:
+   - Upload 4 loại bắt buộc: Tổng quan, VSinh, Ban công, Đồng hồ
+   - Progress indicator cho mỗi loại
+   - Preview ảnh đã upload
+   
+   Bước 4 - Tình trạng:
+   - Checkbox: "Trống ngay" hoặc chọn ngày
+   - Checkboxes tiện ích: Máy lạnh, Thang máy, Nuôi pet...
+   - Click "Gửi duyệt"
+   - Gọi API: POST /api/seller/listings
+
+D. Nạp tiền (/seller/billing)
+   - Cards hiển thị các gói: Cơ bản, Tiêu chuẩn, Cao cấp, Kiểm định
+   - Chọn gói → click "Thanh toán VNPay"
+   - Modal QR code:
+     * Gọi API: POST /api/payment/create
+     * Hiển thị QR VNPay
+     * Đếm ngược 15 phút
+     * Polling trạng thái
+   - Lịch sử giao dịch table
+   - Gọi API: GET /api/payment/wallet, GET /api/payment/history, GET /api/payment/packages
+
+E. Leads (/seller/leads)
+   - Danh sách khách hàng quan tâm
+   - Status: Mới, Đã liên hệ, Quan tâm, Không quan tâm
+   - Thông tin: Tên, SĐT, Tin, Thời gian muốn xem
+   - Actions: Gọi, Cập nhật trạng thái
+
+F. Hồ sơ (/seller/profile)
+   - Thông tin cá nhân
+   - Trạng thái xác minh
+   - Upload giấy tờ
+
+--------------------------------------------------------------------------------
+FLOW 4: BAN QUẢN LÝ (MANAGER)
+--------------------------------------------------------------------------------
+A. Dashboard (/manager)
+   - Stats: Đang duyệt, Đã duyệt hôm nay, Bị từ chối hôm nay, Tổng users
+   - Gọi API: GET /api/manager/stats
+
+B. Duyệt tin (/manager/approvals)
+   - Table danh sách tin chờ duyệt
+   - Columns: Mã, Tin, Cảnh báo, Trạng thái
+   - Badge cảnh báo: Giá bất thường, Tọa độ không khớp
+   - Click "Mở workspace" → trang duyệt chi tiết
+   
+   Workspace duyệt (/manager/approvals/[id]):
+   - Split view: Hình ảnh | Thông tin
+   - Hình ảnh: Slider, Metadata (GPS, thiết bị)
+   - Thông tin: Địa chỉ map, Bảng giá
+   - Checklist: Địa chỉ khớp, Giá rõ ràng, Ảnh không trùng mạng
+   - Actions:
+     * "Phê duyệt & cấp Verified" (nếu checklist đủ)
+     * Dropdown lý do từ chối
+     * Textarea ghi chú
+     * "Từ chối"
+   - Gọi API: PUT /api/manager/approvals/{id}/approve, PUT /api/manager/approvals/{id}/reject
+
+C. Duyệt chủ nhà (/manager/seller-requests)
+   - Table: Mã, Người dùng, CCCD, Giấy tờ, Khu vực, Trạng thái
+   - Actions: Duyệt, Từ chối
+   - Gọi API: GET /api/manager/seller-requests, PUT /api/manager/seller-requests/{id}/approve
+
+D. Khiếu nại (/manager/reports)
+   - Stats cards: Mở, Nghiêm trọng, Đã xử lý tuần này
+   - Table: Mức, Sự việc, Lý do, Người báo
+   - Badge mức độ: critical, high, medium, low
+   - Click "Xử lý" → Side panel:
+     * Chi tiết khiếu nại
+     * So sánh ảnh (trên web vs thực tế)
+     * Actions:
+       - Cảnh cáo Seller
+       - Tạm khóa bài đăng
+       - Gỡ bài đăng
+       - Chuyển Admin cấm tài khoản
+   - Gọi API: GET /api/manager/reports, PUT /api/manager/reports/{id}/resolve
+
+--------------------------------------------------------------------------------
+FLOW 5: QUẢN TRỊ VIÊN (ADMIN)
+--------------------------------------------------------------------------------
+A. Dashboard (/admin)
+   - Stats cards: Tổng user, Tin đang hoạt động, Tổng Seller, Giao dịch
+   - Chart dòng tiền (Area chart với inflows/refunds)
+   - Gọi API: GET /api/admin/dashboard
+
+B. Quản lý user (/admin/users)
+   - Search input (tên, email, SĐT)
+   - Filter dropdown (vai trò)
+   - Table: Tên, Email, SĐT, Vai trò, Ngày tạo, Thao tác
+   - Actions:
+     * Dropdown đổi vai trò: Người thuê, Chủ đăng tin, Ban quản lý, Quản trị
+     * Button Xóa
+   - Gọi API: GET /api/admin/users, PUT /api/admin/users/{id}/role, DELETE /api/admin/users/{id}
+
+C. Dòng tiền (/admin/finance)
+   - Stats: Tổng GMV, Giao dịch, Đang xử lý, Thất bại
+   - Search input
+   - Table: Mã hệ thống, Mã VNPay, Mô tả, Số tiền, Phương thức, Trạng thái, Ngày
+   - Badge trạng thái: Thành công (green), Đang xử lý (amber), Thất bại (red)
+   - Button "Xuất CSV"
+   - Gọi API: GET /api/admin/transactions
+
+D. Nhật ký hệ thống (/admin/audit)
+   - Table: Người thực hiện, Hành động, Đối tượng, Loại, Thời gian
+   - Filter by: actor, action type, target type
+   - Gọi API: GET /api/admin/audit
+
+================================================================================
+2. MÀN HÌNH CHỨC NĂNG CHI TIẾT
+================================================================================
+
+--------------------------------------------------------------------------------
+SCREEN: LOGIN (/dang-nhap)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [HEADER: Logo Thiên Nhãn Trú Đồ]                                          │
+├────────────────────────────────┬────────────────────────────────────────────┤
+│                                │                                            │
+│  LEFT PANEL (Branding)         │  RIGHT PANEL (Form)                       │
+│                                │                                            │
+│  Badge: Kiểm định #1 VN       │  Tabs: [ĐT+Mật khẩu] [OTP]               │
+│                                │                                            │
+│  Heading:                     │  ┌──────────────────────────────────┐       │
+│  "Tìm phòng thật —           │  │ Số điện thoại                    │       │
+│   thuê đúng người."          │  │ [📱 _______________]             │       │
+│                                │  └──────────────────────────────────┘       │
+│  Description text              │                                            │
+│                                │  ┌──────────────────────────────────┐       │
+│  [SVG Illustration]           │  │ Mật khẩu                         │       │
+│  - Building with windows      │  │ [🔒 _______________] [👁]       │       │
+│  - Checkmark badges           │  └──────────────────────────────────┘       │
+│  - User avatar                │                                            │
+│  - Verified badge             │  [Quên mật khẩu?] [Tạo tài khoản →]         │
+│  - Map pin                    │                                            │
+│                                │  [======== ĐĂNG NHẬP ========→]            │
+│  3 Highlight cards:           │                                            │
+│  ✓ Cam kết hoàn cọc 100%     │  ────────────────────────────────────        │
+│  ✓ Manager kiểm định         │  [🛡 Thiên Nhãn xác thực SĐT]             │
+│  ✓ Thanh toán an toàn VNPay   │                                            │
+│                                │                                            │
+│  Testimonial quote             │                                            │
+│  [Avatar] "Mình từng bị lừa" │                                            │
+│                                │                                            │
+└────────────────────────────────┴────────────────────────────────────────────┘
+
+ELEMENTS:
+- Tabs component (shadcn/ui Tabs)
+- Input fields với icons
+- Password toggle (Eye/EyeOff)
+- Primary button gradient (emerald-600 to teal-500)
+- Badge component
+- SVG illustration
+
+--------------------------------------------------------------------------------
+SCREEN: SELLER LISTING WIZARD (/seller/listings/new)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [HEADER: Tạo / chỉnh sửa tin đăng]                                       │
+│  [Breadcrumb: Tin đăng > Tạo mới]                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  [STEPPER]                                                                 │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                       │
+│  │✓ 1 Địa  │ │  2 Biểu  │ │  3 Hình  │ │  4 Tình │                       │
+│  │   chỉ   │ │    phí   │ │    ảnh   │ │   trạng  │                       │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘                       │
+│                                                                             │
+├────────────────────────────────────┬────────────────────────────────────────┤
+│                                    │                                        │
+│  MAIN CONTENT                      │  SIDEBAR                              │
+│                                    │                                        │
+│  ┌──────────────────────────────┐  │  ┌────────────────────────────────┐  │
+│  │ Bước 1: Địa chỉ chính xác  │  │  │ [Checklist]                    │  │
+│  │                              │  │  │                                │  │
+│  │ [Tỉnh/Thành    ▼]           │  │  │ ✓ 1. Ghim cửa vào              │  │
+│  │ [Quận/Huyện    ▼]           │  │  │ ✓ 2. Điện/nước/cọc             │  │
+│  │ [Phường/Xã     ▼]           │  │  │ ○ 3. Ảnh gốc + đồng hồ         │  │
+│  │ [Số nhà        ___]         │  │  │ ○ 4. Tình trạng phòng           │  │
+│  │                              │  │  └────────────────────────────────┘  │
+│  │ ⚠ Không cho phép địa chỉ   │  │                                        │
+│  │    chung chung              │  │  ┌────────────────────────────────┐  │
+│  │                              │  │  │ 💡 Vì sao phải đủ 3 khối?     │  │
+│  │ ┌────────────────────────┐   │  │  │                                │  │
+│  │ │      [MAP BOARD]       │   │  │  │ Tin đủ dữ liệu được ưu tiên   │  │
+│  │ │    📍 ← Kéo đánh dấu  │   │  │  │ duyệt, gắn badge...          │  │
+│  │ └────────────────────────┘   │  │  └────────────────────────────────┘  │
+│  │                              │  │                                        │
+│  │ Lat: 10.776900   Lng: ...   │  │                                        │
+│  └──────────────────────────────┘  │                                        │
+│                                    │                                        │
+├────────────────────────────────────┴────────────────────────────────────────┤
+│  [← Quay lại]                              [Tiếp tục →]                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+WIZARD STEPS:
+
+STEP 1 - Địa chỉ:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Bước 2: Biểu phí minh bạch                                               │
+│                                                                             │
+│ ⚠ Điện và nước bắt buộc nhập số                                          │
+│                                                                             │
+│ ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│ │Giá thuê     │  │Tiền cọc     │  │Điện/kWh     │  │Nước/tháng   │      │
+│ │[________] VNĐ│  │[________] VNĐ│  │[________] VNĐ│  │[________] VNĐ│      │
+│ │     [0đ]     │  │              │  │     [0đ]     │  │     [0đ]     │      │
+│ └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘      │
+│ ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│ │Internet      │  │Xe máy        │  │Xe ô tô       │  │Phí quản lý │      │
+│ │[________] VNĐ│  │[________] VNĐ│  │[________] VNĐ│  │[________] VNĐ│      │
+│ └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+STEP 2 - Hình ảnh:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Bước 3: Ảnh & bằng chứng                                                 │
+│                                                                             │
+│ 📷 4 loại bắt buộc:                                                       │
+│                                                                             │
+│ ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────┐ │
+│ │ ✓ Tổng quan    │  │ ✓ Nhà vệ sinh  │  │   Ban công      │  │Đồng hồ │ │
+│ │   phòng        │  │                │  │   cửa sổ       │  │         │ │
+│ │   [Preview ✓]  │  │   [Preview ✓]  │  │   [Upload]      │  │[Upload] │ │
+│ │   High Trust   │  │   High Trust   │  │                │  │         │ │
+│ └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────┘ │
+│                                                                             │
+│ 📄 Tải giấy tờ quản lý/cho thuê (PDF) — ẩn với tenant                     │
+│    [Chọn file...]                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+STEP 3 - Tình trạng:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Bước 4: Tình trạng phòng                                                  │
+│                                                                             │
+│ [✓] Trống ngay                                                            │
+│ [ ] Dự kiến trống từ ngày [____/____/________]                            │
+│                                                                             │
+│ Tiện ích:                                                                  │
+│ ┌───────────────────────┐  ┌───────────────────────┐                       │
+│ │ [✓] Máy lạnh         │  │ [ ] Thang máy         │                       │
+│ │ [ ] Giờ giấc tự do   │  │ [✓] PCCC đạt chuẩn   │                       │
+│ │ [ ] Cho nuôi thú cưng│  │ [ ] Nội thất có sẵn  │                       │
+│ └───────────────────────┘  └───────────────────────┘                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+SCREEN: SELLER BILLING (/seller/billing)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [BADGE: Nạp tiền & mua gói tin]                                          │
+│                                                                             │
+│  ══════════════════════════════════════════════════════════════              │
+│  HEADING: Bảng giá dịch vụ                                                │
+│  Mô tả: Tin thường, Tin VIP, Gói kiểm định                                │
+│  ══════════════════════════════════════════════════════════════              │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────┐      │
+│  │  💰 Số dư ví: 1,250,000đ              Đã chi tiêu: 3,200,000đ  │      │
+│  └──────────────────────────────────────────────────────────────────┘      │
+│                                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                       │
+│  │   Cơ Bản     │  │  ★ Tiêu Chuẩn │  │  Cao Cấp    │                       │
+│  │              │  │   (Phổ biến)  │  │             │                       │
+│  │   Miễn phí  │  │   99,000đ    │  │  299,000đ   │                       │
+│  │              │  │              │  │             │                       │
+│  │ • 5 tin đăng│  │ • 20 tin đăng│  │• Không giới  │                       │
+│  │ • Hỗ trợ    │  │ • Ưu tiên    │  │  hạn tin    │                       │
+│  │   email     │  │ • Verified ✓ │  │• VIP badge  │                       │
+│  │ • Stats cơ  │  │ • Analytics  │  │• Analytics   │                       │
+│  │   bản      │  │              │  │  nâng cao   │                       │
+│  │              │  │              │  │• Verified ✓ │                       │
+│  │[Chọn gói]  │  │[★ Mua ngay]  │  │[Chọn gói]  │                       │
+│  └──────────────┘  └──────────────┘  └──────────────┘                       │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────┐      │
+│  │  Lịch sử giao dịch                                                  │      │
+│  │  ┌────────┬────────┬──────────┬───────┬────────┬────────┐          │      │
+│  │  │Mã đơn  │Gói     │Số tiền  │Cổng   │Trạng  │Ngày    │          │      │
+│  │  ├────────┼────────┼──────────┼───────┼────────┼────────┤          │      │
+│  │  │VR-2026 │Tin VIP │299,000đ │VNPay  │✓ Thành │14/09   │          │      │
+│  │  │VR-2026 │Kiểm đị│799,000đ │VNPay  │✓ Thành │10/09   │          │      │
+│  │  └────────┴────────┴──────────┴───────┴────────┴────────┘          │      │
+│  └──────────────────────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PAYMENT MODAL:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  THANH TOÁN TRỰC TUYẾN VNPAY                                    [X]        │
+│  ─────────────────────────────────────────────────────────────────           │
+│                                                                             │
+│  ┌─────────────────────────────┐  ┌───────────────────────┐                 │
+│  │                             │  │                       │                 │
+│  │  ⏳ Đang chờ thanh toán... │  │    ┌─────────────┐   │                 │
+│  │  QR hết hạn sau 14:32     │  │    │             │   │                 │
+│  │                             │  │    │   [QR CODE] │   │                 │
+│  │  ┌───────────────────────┐ │  │    │             │   │                 │
+│  │  │ Mã đơn: TN123456    │ │  │    └─────────────┘   │                 │
+│  │  │ Gói: Tiêu Chuẩn     │ │  │                       │                 │
+│  │  │ Số tiền: 99,000đ   │ │  │  [Mở app thanh toán] │                 │
+│  │  └───────────────────────┘ │  │                       │                 │
+│  │                             │  │  [Mô phỏng thành    │                 │
+│  │  💡 Quét mã QR bằng app   │  │   công]              │                 │
+│  │     ngân hàng              │  │                       │                 │
+│  └─────────────────────────────┘  └───────────────────────┘                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+SCREEN: MANAGER APPROVALS (/manager/approvals)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  [HEADER: Dashboard điều hành]                                             │
+├───────────────────────────────┬─────────────────────────────────────────────┤
+│                               │                                             │
+│  SIDEBAR                      │  MAIN CONTENT                               │
+│                               │                                             │
+│  📋 Duyệt tin                │  ═══════════════════════════════════════      │
+│  👥 Duyệt chủ nhà           │  HÀNG ĐỢI DUYỆT BÀI                        │
+│  ⚠️ Khiếu nại                │  ────────────────────────────────────        │
+│                               │                                             │
+│  ─────────────────────        │  [BUTTON: Mở workspace duyệt]                │
+│                               │                                             │
+│  ⏱️ SLA hôm nay:             │  ┌────────────────────────────────────────┐  │
+│     3h 18m                   │  │ Mã    │ Tin đăng    │ Cảnh báo │ Trạng │  │
+│                               │  ├───────┼─────────────┼───────────┼────────┤  │
+│     Trung bình duyệt         │  │VR-1052│ Căn háp    │ ⚠️ Giá   │ ⏳    │  │
+│     1 tin: 3h               │  │       │ Lumière    │ bất thường│Chờ duyệt│  │
+│                               │  ├───────┼─────────────┼───────────┼────────┤  │
+│                               │  │VR-1048│ Sunrise   │ ⚠️ Tọa độ│ ⏳    │  │
+│                               │  │       │ Studio    │ không khớp│Chờ duyệt│  │
+│                               │  └────────────────────────────────────────┘  │
+│                               │                                             │
+└───────────────────────────────┴─────────────────────────────────────────────┘
+
+APPROVAL WORKSPACE:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  2 tin chờ duyệt                                                           │
+│  ══════════════════════════════════════════════════════════════════          │
+│  WORKSPACE THẨM ĐỊNH TIN ĐĂNG                                              │
+│  Đối soát ảnh, giá, địa chỉ trước khi cấp badge Manager Verified          │
+│                                                          [⏱ SLA còn 3h 18m] │
+│                                                                             │
+├────────────────────────────────────┬────────────────────────────────────────┤
+│                                    │                                        │
+│  ┌──────────────────────────────┐  │  ┌────────────────────────────────┐   │
+│  │  Căn hộ Lumière Thảo Điền   │  │  │  Địa chỉ & Tọa độ              │   │
+│  │  [Badge: Chờ duyệt]         │  │  │                                │   │
+│  │                              │  │  │  [MAP: Vị trí đánh dấu]        │   │
+│  │  [===== SLIDER ẢNH =====]   │  │  │                                │   │
+│  │  [● ○ ○ ○ ○]                │  │  │  24B Nguyễn Văn Hưởng          │   │
+│  │                              │  │  │  10.776900, 106.7009           │   │
+│  │  [Badge: Ảnh gốc]           │  │  │  ─────────────────────────     │   │
+│  │  [Reverse image]             │  │  │  Thuê: 8,500,000đ              │   │
+│  │                              │  │  │  Điện: 3,800đ/kWh             │   │
+│  │  Metadata:                  │  │  │  Nước: 100,000đ                 │   │
+│  │  📱 iPhone 15 Pro           │  │  │  QLý: 200,000đ                 │   │
+│  │  📍 GPS: 10.7769, 106.7009  │  │  └────────────────────────────────┘   │
+│  │  ✓ Toàn vẹn                 │  │                                        │
+│  │                              │  │  ┌────────────────────────────────┐   │
+│  │  ⚠️ Thứ tự ảnh hợp lệ      │  │  │  HÀNH ĐỘNG DUYỆT               │   │
+│  └──────────────────────────────┘  │  │                                │   │
+│                                    │  │  [✓] Địa chỉ khớp tọa độ      │   │
+│                                    │  │  [✓] Bảng giá rõ ràng         │   │
+│                                    │  │  [ ] Ảnh không trùng mạng      │   │
+│                                    │  │                                │   │
+│                                    │  │  [✅ PHÊ DUYỆT & CẤP VERIFIED]│   │
+│                                    │  │                                │   │
+│                                    │  │  Lý do từ chối: [▼ Chọn...]   │   │
+│                                    │  │  Ghi chú:                      │   │
+│                                    │  │  [________________________]    │   │
+│                                    │  │                                │   │
+│                                    │  │  [🚫 TỪ CHỐI]                  │   │
+│                                    │  └────────────────────────────────┘   │
+│                                    │                                        │
+└────────────────────────────────────┴────────────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+SCREEN: MANAGER REPORTS (/manager/reports)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  XỬ LÝ KHIẾU NẠI & BÁO CÁO                                               │
+│  Tenant bấm "Báo cáo vi phạm". Manager xử lý.                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                          │
+│  │   Mở: 18    │  │Nghiêm trọng:│  │Đã xử lý    │                          │
+│  │             │  │    2        │  │tuần này: 34│                          │
+│  └─────────────┘  └─────────────┘  └─────────────┘                          │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ Mức │ Sự việc           │ Lý do     │ Người báo │              │    │
+│  ├─────┼────────────────────┼───────────┼───────────┼──────────────┤    │
+│  │ 🔴  │Địa chỉ không tồn  │Sai địa chỉ│Nguyễn Hà  │ [Xử lý]    │    │
+│  │ 🟠  │Chủ trọ đòi phí ẩn│Phí ẩn     │Trần Minh  │ [Xử lý]    │    │
+│  │ 🟠  │Đến xem khác ảnh  │Ảnh ảo     │Lê Anh     │ [Xử lý]    │    │
+│  │ 🟡  │Phòng đã cho thuê │Hết phòng  │Phạm Vy   │ [Xử lý]    │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+REPORT SIDE PANEL:
+┌────────────────────────────────────────┐
+│  Địa chỉ không tồn tại            [X]  │
+│  ───────────────────────────────────    │
+│  RP-1048 · Sai địa chỉ                  │
+│                                        │
+│  "Báo cáo từ Nguyễn Hà: Địa chỉ..."   │
+│                                        │
+│  ┌─────────────┐  ┌─────────────┐       │
+│  │ Ảnh trên   │  │ Thực tế    │       │
+│  │ web         │  │ tenant đến │       │
+│  │             │  │ xem        │       │
+│  │  [IMAGE]   │  │  [IMAGE]   │       │
+│  └─────────────┘  └─────────────┘       │
+│                                        │
+├────────────────────────────────────────┤
+│  [CẢNH CÁO SELLER]                    │
+│  [TẠM KHÓA BÀI ĐĂNG]                 │
+│  [GỠ BÀI ĐĂNG]                       │
+│  [🚫 CHUYỂN ADMIN CẤM TÀI KHOẢN]     │
+└────────────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+SCREEN: ADMIN USERS (/admin/users)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  QUẢN LÝ TÀI KHOẢN                                                         │
+│  Xem, phân quyền và khóa tài khoản người dùng                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  [🔍 Tìm theo tên, email, SĐT...]  [▼ Tất cả vai trò]                     │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ Tên         │ Email           │ SĐT        │Vai trò│Ngày tạo│      │
+│  ├─────────────┼─────────────────┼────────────┼───────┼─────────┤      │
+│  │Nguyễn Hà   │ha.nguyen@..     │0918 334 221│Tenant │18/06/26│      │
+│  │            │                 │            │[▼]    │         │      │
+│  │            │                 │            │        │         │      │
+│  │Minh Anh    │hello@minhanh.vn│0903 112 334│Seller │17/06/26│      │
+│  │Realty      │                 │            │[▼]    │         │      │
+│  │            │                 │            │        │         │      │
+│  │Mai Linh    │mai.linh@veri...│0909 000 111│Manager │16/06/26│      │
+│  │            │                 │            │[▼]    │         │      │
+│  │            │                 │            │        │         │      │
+│  │Thảo Nguyễn │thao.nguyen@... │0908 000 222│Admin  │01/01/26│      │
+│  │            │                 │            │[▼]    │         │      │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  ROLE DROPDOWN OPTIONS:                                                     │
+│  ┌────────────────────┐                                                      │
+│  │ ○ Người thuê      │                                                      │
+│  │ ○ Chủ đăng tin   │                                                      │
+│  │ ● Ban quản lý   │  ← Current                                            │
+│  │ ○ Quản trị viên │                                                      │
+│  └────────────────────┘                                                      │
+│                                                                             │
+│  [🗑 Xóa]                                                                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+SCREEN: ADMIN FINANCE (/admin/finance)
+--------------------------------------------------------------------------------
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  QUẢN LÝ DÒNG TIỀN & ĐỐI SOÁT VNPAY                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│  │ Tổng GMV    │  │ Giao dịch   │  │Đang xử lý   │  │ Thất bại    │    │
+│  │ 1.84 tỷ    │  │ 1.62 tỷ    │  │     1        │  │     3        │    │
+│  │+18.4% tháng│  │ 96.8% thành│  │              │  │Cần hoàn tiền│    │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘    │
+│                                                                             │
+│  [🔍 Tìm mã GD...]                              [📥 Xuất CSV]              │
+│                                                                             │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │Mã hệ thống│Mã VNPay     │Mô tả    │Số tiền   │Phương│Trạng thái│    │
+│  ├────────────┼──────────────┼──────────┼───────────┼──────┼───────────┤    │
+│  │VR-98241    │VNPAY-2409824│Tin VIP   │12,800,000│VNPay │✅ Thành công│    │
+│  │VR-98238    │VNPAY-2409838│Kiểm định│4,500,000 │VNPay │✅ Thành công│    │
+│  │VR-98231    │VNPAY-2409831│Tin VIP   │8,900,000 │VNPay │⏳ Đang xử lý│    │
+│  │VR-98196    │VNPAY-2409819│Tin thường│2,400,000 │VNPay │✅ Thành công│    │
+│  │VR-98170    │VNPAY-2409817│Tin VIP   │6,700,000 │VNPay │❌ Thất bại  │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  STATUS BADGES:                                                             │
+│  🟢 Thành công (bg-emerald-100)                                            │
+│  🟡 Đang xử lý (bg-amber-100)                                              │
+│  🔴 Thất bại (bg-red-100)                                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+3. UI ELEMENTS & COMPONENTS
+================================================================================
+
+COMMON COMPONENTS:
+├── Button
+│   ├── Variants: primary, outline, ghost, destructive
+│   ├── Sizes: sm, md, lg
+│   └── States: default, hover, active, disabled, loading
+│
+├── Input
+│   ├── Types: text, password (với toggle), number, tel, email
+│   ├── States: default, focus, error, disabled
+│   └── With icons (left/right)
+│
+├── Select / Dropdown
+│   ├── Single select
+│   ├── Multi-select
+│   └── Searchable dropdown
+│
+├── Badge
+│   ├── Variants: default, outline, destructive
+│   └── Colors: emerald, amber, red, blue, slate
+│
+├── Card
+│   ├── CardHeader, CardContent, CardFooter, CardTitle
+│   └── Rounded: rounded-xl, rounded-2xl
+│
+├── Tabs
+│   ├── TabsList, TabsTrigger, TabsContent
+│   └── Variants: default, pills
+│
+├── Table
+│   ├── thead, tbody, tr, th, td
+│   └── Features: sortable, selectable, pagination
+│
+├── Modal / Dialog
+│   ├── Header với close button
+│   ├── Content scrollable
+│   └── Footer với actions
+│
+├── Side Panel (Slide-in)
+│   ├── Full height từ bên phải
+│   ├── Header, scrollable content, sticky footer
+│   └── Backdrop click to close
+│
+├── Toast / Notification
+│   ├── Types: success, error, warning, info
+│   └── Auto-dismiss: 5 giây
+│
+├── Skeleton / Loading
+│   ├── Table skeleton rows
+│   ├── Card skeleton
+│   └── Inline loading spinner
+│
+├── Empty State
+│   ├── Icon
+│   ├── Title
+│   ├── Description
+│   └── CTA button
+
+CUSTOM COMPONENTS:
+├── ListingCard
+│   ├── Image với badges (Verified, VIP, HighTrust)
+│   ├── Title, address, price
+│   ├── Stats: views, rating
+│   └── Quick actions: Save, Share
+│
+├── MapBoard
+│   ├── Interactive drag-to-pin
+│   ├── Grid overlay
+│   └── Lat/Lng display
+│
+├── ImageUploader
+│   ├── Drag & drop zone
+│   ├── Progress indicator
+│   └── Preview thumbnails
+│
+├── StatCard
+│   ├── Icon
+│   ├── Label
+│   ├── Value (large, monospace)
+│   └── Trend/Detail
+│
+├── ApprovalChecklist
+│   ├── Checkbox items
+│   ├── Progress indicator
+│   └── Disabled state when incomplete
+│
+├── QRCodDisplay
+│   ├── QR code image
+│   ├── Countdown timer
+│   └── Payment status indicator
+│
+├── AuditLogRow
+│   ├── Actor avatar + name
+│   ├── Action badge
+│   ├── Target info
+│   └── Timestamp
+
+================================================================================
+4. API ENDPOINTS
+================================================================================
+
+BASE URL: http://localhost:3001/api
+
+--------------------------------------------------------------------------------
+AUTH (/api/auth)
+--------------------------------------------------------------------------------
+POST   /auth/register      - Đăng ký tài khoản mới
+POST   /auth/login         - Đăng nhập (SĐT + mật khẩu)
+POST   /auth/otp/send     - Gửi mã OTP
+POST   /auth/otp/verify   - Xác minh OTP
+GET    /auth/me           - Lấy thông tin user hiện tại
+PUT    /auth/profile      - Cập nhật thông tin cá nhân
+PUT    /auth/password     - Đổi mật khẩu
+POST   /auth/logout       - Đăng xuất
+
+Request: POST /auth/login
+{
+  "phone": "0903112334",
+  "password": "seller123"
+}
+
+Response:
+{
+  "user": {
+    "id": "u-xxx",
+    "role": "seller",
+    "fullName": "Trần Minh Anh",
+    "phone": "0903112334",
+    "email": "hello@minhanh.vn",
+    "sellerStatus": "active"
+  },
+  "token": "eyJhbG..."
+}
+
+--------------------------------------------------------------------------------
+LISTINGS (/api/listings)
+--------------------------------------------------------------------------------
+GET    /listings           - Danh sách tin (có filter/pagination)
+GET    /listings/featured  - Tin nổi bật
+GET    /listings/:id       - Chi tiết tin
+
+Query params:
+- roomType: "Phòng trọ"|"Chung cư mini"|"Căn hộ dịch vụ"|"Ký túc xá"
+- minRent, maxRent: number
+- district, ward: string
+- verified, vip: boolean
+- furniture, pets: boolean
+- vacantNow: boolean
+- sortBy: "rent"|"createdAt"|"views"
+- sortOrder: "asc"|"desc"
+- page, limit: number
+
+--------------------------------------------------------------------------------
+SELLER (/api/seller)
+--------------------------------------------------------------------------------
+GET    /seller/dashboard        - Dashboard stats
+GET    /seller/listings         - Danh sách tin của seller
+POST   /seller/listings         - Tạo tin mới
+PUT    /seller/listings/:id     - Cập nhật tin
+DELETE /seller/listings/:id     - Xóa tin
+GET    /seller/leads            - Danh sách leads
+PUT    /seller/leads/:id        - Cập nhật lead
+GET    /seller/appointments     - Lịch hẹn xem
+PUT    /seller/appointments/:id - Cập nhật lịch hẹn
+
+Request: POST /seller/listings
+{
+  "title": "Căn hộ Lumière Thảo Điền",
+  "roomType": "Căn hộ dịch vụ",
+  "houseNumber": "24B",
+  "street": "Nguyễn Văn Hưởng",
+  "ward": "Thảo Điền",
+  "district": "Thủ Đức",
+  "city": "TP. Hồ Chí Minh",
+  "lat": 10.8069,
+  "lng": 106.7312,
+  "rent": 8500000,
+  "depositMonths": 1,
+  "electricity": 3800,
+  "electricityType": "Nhà nước",
+  "water": 100000,
+  "waterType": "Đầu người",
+  "furniture": true,
+  "pets": false,
+  "vacantNow": true,
+  "photos": ["url1", "url2"],
+  "amenities": ["Máy lạnh", "Thang máy"]
+}
+
+--------------------------------------------------------------------------------
+MANAGER (/api/manager)
+--------------------------------------------------------------------------------
+GET    /manager/stats                    - Stats tổng quan
+GET    /manager/approvals               - Tin chờ duyệt
+PUT    /manager/approvals/:id/approve   - Phê duyệt tin
+PUT    /manager/approvals/:id/reject    - Từ chối tin
+GET    /manager/seller-requests         - Yêu cầu nâng quyền
+PUT    /manager/seller-requests/:id/approve - Duyệt seller
+PUT    /manager/seller-requests/:id/reject  - Từ chối seller
+GET    /manager/reports                 - Danh sách khiếu nại
+PUT    /manager/reports/:id/resolve     - Xử lý khiếu nại
+
+Request: PUT /manager/approvals/:id/approve
+{
+  "verified": true,
+  "vip": true,
+  "highTrust": true
+}
+
+Request: PUT /manager/approvals/:id/reject
+{
+  "reason": "Ảnh không đúng thực tế. Bảng giá chưa rõ ràng."
+}
+
+--------------------------------------------------------------------------------
+ADMIN (/api/admin)
+--------------------------------------------------------------------------------
+GET    /admin/dashboard          - Dashboard stats
+GET    /admin/users              - Danh sách users
+PUT    /admin/users/:id/role     - Đổi vai trò user
+DELETE /admin/users/:id          - Xóa user
+GET    /admin/transactions       - Danh sách giao dịch
+GET    /admin/config             - Lấy cấu hình hệ thống
+PUT    /admin/config             - Cập nhật cấu hình
+GET    /admin/audit              - Nhật ký hệ thống
+
+Request: PUT /admin/users/:id/role
+{
+  "role": "manager"
+}
+
+Query params cho /admin/users:
+- role: "tenant"|"seller"|"manager"|"admin"
+- search: string
+- page: number
+
+--------------------------------------------------------------------------------
+PAYMENT (/api/payment)
+--------------------------------------------------------------------------------
+POST   /payment/create           - Tạo thanh toán VNPay
+GET    /payment/status/:txnRef   - Kiểm tra trạng thái
+GET    /payment/history          - Lịch sử giao dịch
+GET    /payment/wallet           - Số dư ví
+GET    /payment/packages         - Danh sách gói dịch vụ
+
+Request: POST /payment/create
+{
+  "amount": 99000,
+  "packageId": "standard",
+  "description": "Gói Tiêu Chuẩn - 30 ngày"
+}
+
+Response:
+{
+  "success": true,
+  "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?...",
+  "transactionId": "TN1234567890",
+  "amount": 99000
+}
+
+--------------------------------------------------------------------------------
+TENANT (/api/tenant)
+--------------------------------------------------------------------------------
+GET    /tenant/profile           - Thông tin & stats
+GET    /tenant/saved            - Tin đã lưu
+POST   /tenant/saved/:listingId  - Lưu tin
+DELETE /tenant/saved/:listingId  - Bỏ lưu tin
+POST   /tenant/appointments      - Tạo lịch hẹn xem
+GET    /tenant/appointments      - Danh sách lịch hẹn
+DELETE /tenant/appointments/:id  - Hủy lịch hẹn
+POST   /tenant/leads             - Gửi lead cho seller
+POST   /tenant/reviews           - Viết review
+POST   /tenant/reports           - Báo cáo vi phạm
+
+================================================================================
+5. ERROR HANDLING
+================================================================================
+
+ERROR CODES:
+- 400: Bad Request - Dữ liệu không hợp lệ
+- 401: Unauthorized - Chưa đăng nhập
+- 403: Forbidden - Không có quyền
+- 404: Not Found - Không tìm thấy
+- 500: Internal Server Error - Lỗi server
+
+ERROR RESPONSE FORMAT:
+{
+  "error": "Mô tả lỗi",
+  "code": "ERROR_CODE"
+}
+
+COMMON ERRORS:
+- "Số điện thoại đã đăng ký"
+- "Mật khẩu không đúng"
+- "Không có quyền truy cập"
+- "Tin đăng không tồn tại"
+- "Tài khoản đã bị khóa"
+
+================================================================================
+6. STATE MANAGEMENT
+================================================================================
+
+AUTH STATE (Context: AuthContext)
+- user: SessionUser | null
+- ready: boolean
+- isDemoMode: boolean
+- login(user): void
+- logout(): void
+- register(payload): Promise
+
+API CALLS:
+- Sử dụng React Query hoặc SWR để cache và refetch
+- optimistic updates cho CRUD operations
+- Error boundaries cho graceful error handling
+
+LOCAL STORAGE KEYS:
+- token: JWT token
+- thiennhan_accounts: Demo accounts (dev mode)
+- thiennhan_current: Current user ID
+
+================================================================================
+7. ROUTING & NAVIGATION
+================================================================================
+
+PUBLIC ROUTES:
+/                           - Trang chủ
+/tim-kiem                  - Tìm kiếm phòng
+/tim-kiem/[id]             - Chi tiết tin
+/dang-nhap                 - Đăng nhập
+/dang-ky                   - Đăng ký
+/quen-mat-khau             - Quên mật khẩu
+
+TENANT ROUTES:
+/tai-khoan                 - Tài khoản (dashboard)
+/tai-khoan/lich-hen        - Lịch hẹn xem
+/tai-khoan/da-luu          - Tin đã lưu
+
+SELLER ROUTES:
+/seller                    - Dashboard
+/seller/listings           - Quản lý tin
+/seller/listings/new        - Tạo tin mới
+/seller/listings/[id]/edit - Sửa tin
+/seller/leads              - Leads
+/seller/billing             - Nạp tiền
+/seller/profile             - Hồ sơ
+
+MANAGER ROUTES:
+/manager                    - Dashboard (redirect to approvals)
+/manager/approvals          - Duyệt tin
+/manager/seller-requests    - Duyệt seller
+/manager/reports            - Khiếu nại
+
+ADMIN ROUTES:
+/admin                      - Dashboard
+/admin/users                - Quản lý users
+/admin/finance              - Dòng tiền
+/admin/audit                - Nhật ký
+
+MIDDLEWARE PROTECTION:
+- Kiểm tra role từ token
+- Redirect unauthorized users về trang phù hợp
+- Show/Hide menu items theo role
+
+================================================================================
+8. DESIGN TOKENS & STYLES
+================================================================================
+
+COLORS:
+--emerald-50: #ecfdf5
+--emerald-100: #d1fae5
+--emerald-500: #10b981
+--emerald-600: #059669
+--emerald-700: #047857
+
+--slate-50: #f8fafc
+--slate-100: #f1f5f9
+--slate-200: #e2e8f0
+--slate-400: #94a3b8
+--slate-500: #64748b
+--slate-900: #0f172a
+
+--amber-50: #fffbeb
+--amber-100: #fef3c7
+--amber-500: #f59e0b
+--amber-600: #d97706
+
+--red-50: #fef2f2
+--red-100: #fee2e2
+--red-500: #ef4444
+--red-600: #dc2626
+
+TYPOGRAPHY:
+- Font: Inter (Google Fonts)
+- Headings: font-bold, tracking-tight
+- Body: text-sm (14px), text-base (16px)
+- Small: text-xs (12px), text-[10px]
+
+SPACING:
+- 1: 4px
+- 2: 8px
+- 3: 12px
+- 4: 16px
+- 5: 20px
+- 6: 24px
+- 8: 32px
+
+BORDER RADIUS:
+- sm: 6px
+- DEFAULT: 8px
+- md: 10px
+- lg: 12px
+- xl: 16px
+- 2xl: 24px
+
+SHADOWS:
+- sm: 0 1px 2px 0 rgb(0 0 0 / 0.05)
+- DEFAULT: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)
+- md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)
+- lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)
+
+================================================================================
+HẾT DOCUMENT
+================================================================================

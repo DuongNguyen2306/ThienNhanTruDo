@@ -4,7 +4,7 @@ import { Providers } from '@/components/providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Thiên Nhãn trú đồ — Phòng trọ đã kiểm định',
+  title: 'THIÊN DỮ TRÚ ĐỒ — Phòng trọ đã kiểm định',
   description:
     'Nền tảng thuê phòng minh bạch tại Việt Nam: địa chỉ chính xác, biểu phí rõ ràng, ảnh đã kiểm định thực tế.',
   icons: {
@@ -15,13 +15,10 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
-  other: {
-    'google-fonts': 'Allura',
-  },
   links: [
     { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
     { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
-    { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Allura&display=swap' },
+    { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap' },
   ],
 }
 

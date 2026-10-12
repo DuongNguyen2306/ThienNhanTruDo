@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS stored as String
+// role: tenant | seller | manager | admin
+// listingStatus: draft | pending | active | rejected | inactive
+// sellerStatus: none | pending | active | rejected
+// appointmentStatus: pending | confirmed | cancelled | completed
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String?   @unique
+  phone         String    @unique
+  password      String
+  fullName      String
+  role          String    @default("tenant") // tenant | seller | manager | admin
+  initials      String?
+  title         String?
+  twoFactor     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Seller profile (nullable - only for sellers)
+  sellerProfile SellerProfile?
+
+  // Relations
+  listings        Listing[]       @relation("SellerListings")
+  appointments    Appointment[]   @relation("TenantAppointments")
+  leads           SellerLead[]     @relation("SellerLeads")
+  reports         Report[]         @relation("Reporter")
+  reviews         Review[]         @relation("ReviewAuthor")
+  transactions    Transaction[]    @relation("TransactionUser")
+  savedListings   SavedListing[]   @relation("UserSavedListings")
+  auditLogs       AuditLog[]       @relation("ActorLogs")
+
+  @@map("users")
+}
+
+model SellerProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Verification
+  idNumber    String?           // CCCD
+  brand       String?
+  address     String?            // Địa chỉ thường trú
+  docs        String?            // JSON array of document filenames
+  status      String   @default("none") // none | pending | active | rejected
+
+  // Review
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  reviewerId   String?
+  reviewNote   String?
+
+  responseRate Float    @default(100)
+  trustScore   Float    @default(0)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("seller_profiles")
+}
+
+model Listing {
+  id          String   @id @default(uuid())
+  sellerId    String
+  seller      User     @relation("SellerListings", fields: [sellerId], references: [id])
+
+  title       String
+  roomType    String   // phong-tro | chung-cu-mini | nha-tro | can-ho
+
+  // Address
+  houseNumber String?
+  alley       String?
+  street      String?
+  ward        String?
+  district    String?
+  city        String   @default("TP Hồ Chí Minh")
+  lat         Float?
+  lng         Float?
+
+  // Pricing
+  rent        Float    // Tiền thuê hàng tháng (VND)
+  depositMonths Int    @default(1) // Số tháng cọc
+  electricity Float?   // Giá điện (VND/kWh hoặc VND/người)
+  electricityType String? // state | business
+  water        Float?  // Giá nước
+  waterType    String? // person | unit
+  internet     Float?
+  sanitation   Float?
+  parkingBike  Float?
+  parkingCar   Float?
+  managementFee Float?
+
+  // Room specs
+  area        Float?   // Diện tích (m2)
+  direction   String? // north | south | east | west | northeast | northwest | southeast | southwest
+  floor       Int?
+  totalFloors Int?
+  furniture   Boolean  @default(false)
+  pets        Boolean @default(false)
+
+  // Availability
+  availableFrom String?  // YYYY-MM-DD
+  vacantNow    Boolean   @default(true)
+
+  // Quality badges
+  verified     Boolean  @default(false)
+  vip          Boolean  @default(false)
+  highTrust    Boolean  @default(false)
+
+  // Status
+  status      String   @default("draft") // draft | pending | active | rejected | inactive
+
+  // Stats
+  views       Int      @default(0)
+  rating      Float?
+  reviewCount Int      @default(0)
+
+  // Images
+  image       String?  // Ảnh đại diện
+  photos      String?  // JSON array of photo URLs
+
+  // Details
+  amenities   String?  // JSON array of amenity strings
+  roadWidth   Float?
+  carAccess   Boolean  @default(false)
+  truckAccess Boolean  @default(false)
+
+  // Manager review
+  rejectReason String?
+  reviewedAt   DateTime?
+  reviewedBy   String?
+
+  // Flags
+  priceAlert      Boolean @default(false)
+  coordMismatch   Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  appointments Appointment[] @relation("ListingAppointments")
+  reviews      Review[]      @relation("ListingReviews")
+  sellerLead   SellerLead?   @relation("LeadListing")
+
+  @@map("listings")
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  listingId    String
+  listing      Listing  @relation("ListingReviews", fields: [listingId], references: [id])
+  authorId     String
+  author       User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+
+  score        Float    // 1-5
+  photoMatch   Float?   // Đúng ảnh
+  landlord     Float?   // Thái độ chủ nhà
+  security     Float?   // An ninh
+  hygiene      Float?   // Vệ sinh
+  text         String?
+  verifiedStay Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Appointment {
+  id           String   @id @default(uuid())
+  listingId    String
+  listing      Listing  @relation("ListingAppointments", fields: [listingId], references: [id])
+  tenantId     String
+  tenant       User     @relation("TenantAppointments", fields: [tenantId], references: [id])
+
+  when         DateTime // Thời gian hẹn
+  status       String   @default("pending") // pending | confirmed | cancelled | completed
+  phone        String?
+  note         String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("appointments")
+}
+
+model SellerLead {
+  id           String   @id @default(uuid())
+  listingId    String?  @unique
+  listing      Listing? @relation("LeadListing", fields: [listingId], references: [id])
+  sellerId     String
+  seller       User     @relation("SellerLeads", fields: [sellerId], references: [id])
+
+  name         String
+  phone        String
+  message      String?
+  when         DateTime?
+  status       String   @default("new") // new | contacted | interested | not_interested
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("seller_leads")
+}
+
+model Report {
+  id           String   @id @default(uuid())
+  listingId    String?
+  reporterId   String
+  reporter     User     @relation("Reporter", fields: [reporterId], references: [id])
+
+  severity     String   // low | medium | high | critical
+  title        String
+  reason       String
+  tone         String?  // neutral | urgent | emotional
+
+  status       String   @default("pending") // pending | investigating | resolved | dismissed
+  resolution   String?
+  resolvedAt   DateTime?
+  resolvedBy   String?
+
+  createdAt    DateTime @default(now())
+
+  @@map("reports")
+}
+
+model Transaction {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation("TransactionUser", fields: [userId], references: [id])
+
+  type         String   // deposit | withdrawal | refund | payment
+  amount       Float    // VND
+  method       String?  // vnpay | cash | bank_transfer
+  status       String   @default("pending") // pending | completed | failed | refunded
+  description  String?
+
+  vnpayTxRef   String?  // VNPay transaction reference
+  vnpayDate    String?
+
+  createdAt    DateTime @default(now())
+
+  @@map("transactions")
+}
+
+model SavedListing {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation("UserSavedListings", fields: [userId], references: [id])
+  listingId    String
+
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@map("saved_listings")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String
+  actor        User     @relation("ActorLogs", fields: [actorId], references: [id])
+
+  action       String   // created | updated | deleted | approved | rejected | login | logout
+  target       String?  // e.g. listing ID, user ID
+  targetType   String?  // listing | user | transaction
+  details      String?  // JSON
+
+  createdAt    DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model SystemConfig {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  value        String   // JSON stringified
+  description  String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+model SellerWallet {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+
+  balance      Float    @default(0)
+  totalSpent   Float    @default(0)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("seller_wallets")
+}
