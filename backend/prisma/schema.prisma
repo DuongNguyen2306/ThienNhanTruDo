@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
@@ -16,7 +16,7 @@ datasource db {
 // ============================================
 
 model User {
-  id            String    @id @default(uuid())
+  id            String    @id @default(uuid()) @map("_id")
   email         String?   @unique
   phone         String    @unique
   password      String
@@ -40,12 +40,29 @@ model User {
   transactions    Transaction[]    @relation("TransactionUser")
   savedListings   SavedListing[]   @relation("UserSavedListings")
   auditLogs       AuditLog[]       @relation("ActorLogs")
+  wallet          SellerWallet?
+  reservations    Reservation[]    @relation("TenantReservations")
+  tenantContracts Contract[]        @relation("TenantContracts")
+  sellerContracts Contract[]        @relation("SellerContracts")
+  sellerReservations Reservation[] @relation("SellerReservations")
+
+  // Account Moderation Proposals
+  createdProposals  AccountModerationProposal[] @relation("ProposalCreator")
+  targetedProposals AccountModerationProposal[] @relation("ProposalTarget")
+  reviewedProposals AccountModerationProposal[] @relation("ProposalReviewer")
+
+  // Package Orders & Subscriptions
+  packageOrders    PackageOrder[]    @relation("BuyerOrders")
+  subscriptions    Subscription[]    @relation("UserSubscriptions")
+  
+  // Wallet Deposits
+  walletDeposits   WalletDeposit[]
 
   @@map("users")
 }
 
 model SellerProfile {
-  id          String   @id @default(uuid())
+  id          String   @id @default(uuid()) @map("_id")
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -72,7 +89,7 @@ model SellerProfile {
 }
 
 model Listing {
-  id          String   @id @default(uuid())
+  id          String   @id @default(uuid()) @map("_id")
   sellerId    String
   seller      User     @relation("SellerListings", fields: [sellerId], references: [id])
 
@@ -117,6 +134,7 @@ model Listing {
   // Quality badges
   verified     Boolean  @default(false)
   vip          Boolean  @default(false)
+  vipExpiresAt DateTime?  // VIP boost expiration
   highTrust    Boolean  @default(false)
 
   // Status
@@ -153,12 +171,15 @@ model Listing {
   appointments Appointment[] @relation("ListingAppointments")
   reviews      Review[]      @relation("ListingReviews")
   sellerLead   SellerLead?   @relation("LeadListing")
+  reservations Reservation[]
+  contracts    Contract[]
+  savedBy      SavedListing[]
 
   @@map("listings")
 }
 
 model Review {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   listingId    String
   listing      Listing  @relation("ListingReviews", fields: [listingId], references: [id])
   authorId     String
@@ -172,13 +193,24 @@ model Review {
   text         String?
   verifiedStay Boolean  @default(false)
 
+  // Seller response
+  sellerResponse String?
+  sellerResponseAt DateTime?
+
+  // Moderation (manager/admin)
+  hidden      Boolean  @default(false)
+  hiddenReason String?
+  hiddenAt    DateTime?
+  hiddenBy    String?
+
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("reviews")
 }
 
 model Appointment {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   listingId    String
   listing      Listing  @relation("ListingAppointments", fields: [listingId], references: [id])
   tenantId     String
@@ -196,7 +228,7 @@ model Appointment {
 }
 
 model SellerLead {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   listingId    String?  @unique
   listing      Listing? @relation("LeadListing", fields: [listingId], references: [id])
   sellerId     String
@@ -215,7 +247,7 @@ model SellerLead {
 }
 
 model Report {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   listingId    String?
   reporterId   String
   reporter     User     @relation("Reporter", fields: [reporterId], references: [id])
@@ -236,7 +268,7 @@ model Report {
 }
 
 model Transaction {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   userId       String
   user         User     @relation("TransactionUser", fields: [userId], references: [id])
 
@@ -248,6 +280,7 @@ model Transaction {
 
   vnpayTxRef   String?  // VNPay transaction reference
   vnpayDate    String?
+  idempotencyKey String?  // For idempotent boost purchases (uniqueness enforced in app code)
 
   createdAt    DateTime @default(now())
 
@@ -255,10 +288,11 @@ model Transaction {
 }
 
 model SavedListing {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   userId       String
   user         User     @relation("UserSavedListings", fields: [userId], references: [id])
   listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id])
 
   createdAt    DateTime @default(now())
 
@@ -267,7 +301,7 @@ model SavedListing {
 }
 
 model AuditLog {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   actorId      String
   actor        User     @relation("ActorLogs", fields: [actorId], references: [id])
 
@@ -282,7 +316,7 @@ model AuditLog {
 }
 
 model SystemConfig {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   key          String   @unique
   value        String   // JSON stringified
   description  String?
@@ -292,7 +326,7 @@ model SystemConfig {
 }
 
 model SellerWallet {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   userId       String   @unique
   user         User     @relation(fields: [userId], references: [id])
 
@@ -303,4 +337,551 @@ model SellerWallet {
   updatedAt    DateTime @updatedAt
 
   @@map("seller_wallets")
+}
+
+// ============================================
+// WALLET DEPOSIT - Direct wallet top-up via bank transfer
+// Status: PENDING | PENDING_REVIEW | APPROVED | REJECTED | CANCELLED | EXPIRED
+// ============================================
+
+model WalletDeposit {
+  id           String   @id @default(uuid()) @map("_id")
+  
+  // Reference (unique, shown to user)
+  depositRef   String   @unique
+  
+  // User Information
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  
+  // Amount to deposit
+  amount       Float
+  
+  // Bank Transfer Details (snapshot)
+  bankName         String
+  bankBin          String
+  accountNumber    String
+  accountHolder    String
+  
+  // Transfer Reference
+  transferRef      String   @unique
+  
+  // Status: PENDING | PENDING_REVIEW | APPROVED | REJECTED | CANCELLED | EXPIRED
+  status           String   @default("PENDING")
+  
+  // Payment Evidence
+  proofUrl         String?
+  proofUploadedAt  DateTime?
+  
+  // Manager Review
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  reviewerNote     String?
+  
+  // Verification
+  verifiedBankTx   String?
+  verifiedDate     DateTime?
+  
+  // Expiration
+  expiresAt        DateTime
+  
+  // Timestamps
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([status, createdAt])
+  
+  @@map("wallet_deposits")
+}
+
+model Notification {
+  id           String   @id @default(uuid()) @map("_id")
+  userId       String   // Người nhận thông báo
+  type         String   // tin | hen | canhbao | system | hopdong | coc
+  title        String
+  body         String
+  link         String?  // Đường dẫn liên kết (optional)
+  read         Boolean  @default(false)
+  metadata     String?  // JSON cho dữ liệu bổ sung (e.g. listingId, appointmentId)
+
+  createdAt    DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// Reservation: Yêu cầu giữ chỗ (không thu tiền)
+model Reservation {
+  id           String   @id @default(uuid()) @map("_id")
+
+  // Người gửi yêu cầu
+  tenantId     String
+  tenant       User     @relation("TenantReservations", fields: [tenantId], references: [id])
+
+  // Chủ phòng
+  sellerId     String
+  seller       User     @relation("SellerReservations", fields: [sellerId], references: [id])
+
+  // Phòng liên quan
+  listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id])
+
+  // Trạng thái: pending | approved | rejected | cancelled
+  status       String   @default("pending")
+
+  // Ghi chú của tenant
+  note         String?
+
+  // Phản hồi của seller (nếu từ chối)
+  sellerNote   String?
+
+  // Thời hạn giữ chỗ (nếu có)
+  expiresAt    DateTime?
+
+  // Thời điểm xử lý
+  approvedAt   DateTime?
+  rejectedAt   DateTime?
+  cancelledAt  DateTime?
+  cancelledBy  String?   // tenant | seller
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  contracts    Contract[]
+
+  @@index([tenantId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([listingId, status])
+  @@map("reservations")
+}
+
+// Contract: Lưu trữ hợp đồng đã ký bên ngoài
+model Contract {
+  id           String   @id @default(uuid()) @map("_id")
+
+  // Liên quan
+  listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id])
+
+  sellerId     String
+  seller       User    @relation("SellerContracts", fields: [sellerId], references: [id])
+
+  tenantId     String
+  tenant       User    @relation("TenantContracts", fields: [tenantId], references: [id])
+
+  // Liên kết reservation (nullable)
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  // Thông tin hợp đồng
+  title        String
+  contractNumber String?
+
+  // Thời hạn
+  startDate    DateTime?
+  endDate      DateTime?
+
+  // Thông tin tài chính (tham khảo)
+  monthlyRent  Float?
+  depositAmount Float?
+
+  // File
+  fileKey      String   // Tên file trong storage
+  originalFileName String
+  mimeType     String
+  fileSize     Int      // bytes
+
+  // Trạng thái: active_record | archived | revoked
+  status       String   @default("active_record")
+
+  // Versioning
+  parentId     String?  // Contract cha nếu có phiên bản mới
+  version     Int      @default(1)
+
+  uploadedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([listingId, status])
+  @@map("contracts")
+}
+
+// ============================================
+// Account Moderation Proposals
+// proposalType: inspection | warning | suspension_request
+// proposalReason: spam | fake_listing | violation | fraud | suspicious | harassment | other
+// proposalPriority: low | medium | high
+// proposalStatus: draft | pending | approved | rejected
+// ============================================
+
+model AccountModerationProposal {
+  id           String   @id @default(uuid()) @map("_id")
+
+  // ── Creator ──────────────────────────────────────────────────────────────
+  managerId    String
+  manager      User     @relation("ProposalCreator", fields: [managerId], references: [id])
+
+  // ── Target Account ──────────────────────────────────────────────────────
+  targetUserId String
+  targetUser   User     @relation("ProposalTarget", fields: [targetUserId], references: [id])
+
+  // ── Content ─────────────────────────────────────────────────────────────
+  type         String   // inspection | warning | suspension_request
+  reason       String   // spam | fake_listing | violation | fraud | suspicious | harassment | other
+  description  String?
+  priority     String   @default("medium") // low | medium | high
+
+  // ── Evidence ────────────────────────────────────────────────────────────
+  evidence     String?  // JSON array of Report IDs: ["report-id-1", "report-id-2"]
+
+  // ── Timestamps ──────────────────────────────────────────────────────────
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  submittedAt  DateTime? // NULL if draft, set when sent
+  
+  // ── Admin Review ───────────────────────────────────────────────────────
+  status       String   @default("draft") // draft | pending | approved | rejected
+  reviewNote   String?  // Admin's response content
+  reviewerId   String?
+  reviewer     User?    @relation("ProposalReviewer", fields: [reviewerId], references: [id])
+  reviewedAt   DateTime?
+
+  // ── Indexes ────────────────────────────────────────────────────────────
+  @@index([managerId])
+  @@index([targetUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([managerId, status])
+
+  @@map("account_moderation_proposals")
+}
+
+// ============================================
+// BANK ACCOUNT CONFIGURATION
+// Admin-only configuration for receiving bank transfers
+// ============================================
+
+model BankAccount {
+  id           String   @id @default(uuid()) @map("_id")
+  
+  // Bank Information
+  bankName     String   // e.g., "Ngân hàng TMCP Ngoại Thương Việt Nam"
+  bankBin      String   // 6-digit bank code, e.g., "970436" (Vietcombank)
+  accountNumber String  // Bank account number
+  accountHolder String  // Account holder name
+  
+  // Configuration
+  isActive     Boolean  @default(false) // Only one should be active
+  qrImageUrl   String?  // Optional QR code image URL for fallback
+  
+  // Audit
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String?  // Admin user ID
+  
+  // Version for optimistic locking
+  version      Int      @default(1)
+
+  @@map("bank_accounts")
+}
+
+// ============================================
+// PACKAGE ORDER - Manual Bank Transfer
+// Tracks payment orders for manual bank transfer method
+// Status: PENDING_PAYMENT | PENDING_REVIEW | APPROVED | REJECTED | CANCELLED | EXPIRED
+// ============================================
+
+model PackageOrder {
+  id           String   @id @default(uuid()) @map("_id")
+  
+  // Order Reference (unique, shown to user)
+  orderRef     String   @unique // e.g., "TNP-20261019204530-X7K9M"
+  
+  // Buyer Information
+  userId       String
+  user         User     @relation("BuyerOrders", fields: [userId], references: [id])
+  userRole     String   // tenant | seller - snapshot at purchase time
+  
+  // Package Snapshot (immutable after creation)
+  packageId    String   // e.g., "standard", "vip"
+  packageName  String   // e.g., "Gói Tiêu Chuẩn"
+  packagePrice Float    // Price in VND at time of purchase
+  packageDays  Int      // Duration in days
+  
+  // Payment Method
+  method       String   @default("MANUAL_BANK_TRANSFER")
+  
+  // Bank Transfer Details (snapshot of receiving account at purchase)
+  bankName         String
+  bankBin          String
+  accountNumber    String
+  accountHolder    String
+  
+  // Transfer Reference (unique, user must include in transfer)
+  transferRef      String   @unique // e.g., "TNPX7K9M"
+  
+  // Amount to transfer
+  amount           Float
+  
+  // Status Lifecycle
+  status           String   @default("PENDING_PAYMENT")
+  // PENDING_PAYMENT  - Awaiting user transfer
+  // PENDING_REVIEW   - User submitted transfer, awaiting manager review
+  // APPROVED         - Manager verified and approved
+  // REJECTED         - Manager rejected
+  // CANCELLED        - User cancelled
+  // EXPIRED          - Order expired (default 72 hours)
+  
+  // Payment Evidence (uploaded by user)
+  proofUrl         String?  // Uploaded screenshot/photo
+  proofUploadedAt  DateTime?
+  
+  // Manager Review Details
+  reviewedAt       DateTime?
+  reviewedBy       String?  // Manager user ID
+  reviewerNote     String?  // Internal note from manager
+  
+  // Approval Verification (required for approval)
+  verifiedAmount   Float?   // Actual amount received
+  verifiedBankTx   String?  // Bank transaction reference
+  verifiedDate     DateTime? // When the money arrived
+  
+  // Cancellation
+  cancelledAt      DateTime?
+  cancelReason     String?
+  
+  // Expiration
+  expiresAt        DateTime // 72 hours from creation
+  
+  // Timestamps
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  // Indexes
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([status, createdAt])
+  
+  @@map("package_orders")
+}
+
+// ============================================
+// SUBSCRIPTION - Active package subscriptions
+// Tracks which packages are currently active for each user
+// ============================================
+
+model Subscription {
+  id           String   @id @default(uuid()) @map("_id")
+
+  // User (tenant or seller)
+  userId       String
+  user         User     @relation("UserSubscriptions", fields: [userId], references: [id])
+
+  // Package Info
+  packageId    String   // e.g., "standard", "vip", "verify"
+  packageName  String   // e.g., "Gói Tiêu Chuẩn"
+  packageType  String   // standard | vip | verify | basic
+  
+  // Subscription Period
+  startedAt    DateTime @default(now())
+  expiresAt    DateTime
+  
+  // Source (how it was purchased)
+  orderId      String?  // PackageOrder ID if purchased via manual transfer
+  transactionId String? // Transaction ID if purchased via VNPay
+  
+  // Status
+  isActive     Boolean  @default(true)
+  
+  // Benefits snapshot
+  maxListings  Int      @default(0) // 0 = unlimited
+  
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Unique constraint: one active subscription per package type per user
+  @@unique([userId, packageId, isActive])
+  @@index([userId])
+  @@index([expiresAt])
+  
+  @@map("subscriptions")
+}
+
+// ============================================
+// BOOST ORDER - Manual Bank Transfer for VIP Boost
+// Tracks payment orders for VIP boost purchases via bank transfer
+// Status: PENDING | PENDING_REVIEW | APPROVED | REJECTED | CANCELLED | EXPIRED
+// ============================================
+
+model BoostOrder {
+  id           String   @id @default(uuid()) @map("_id")
+  
+  // Order Reference (unique, shown to user)
+  orderRef     String   @unique
+  
+  // Buyer Information
+  userId       String
+  
+  // Listing Info (snapshot)
+  listingId    String
+  listingTitle String
+  
+  // Package Snapshot (immutable after creation)
+  packageId    String
+  packageName  String
+  packagePrice Float
+  packageDays  Int
+  
+  // Bank Transfer Details (snapshot)
+  bankName         String
+  bankBin          String
+  accountNumber    String
+  accountHolder    String
+  
+  // Transfer Reference (unique, user must include in transfer)
+  transferRef      String   @unique
+  
+  // Amount to transfer
+  amount           Float
+  
+  // Status: PENDING | PENDING_REVIEW | APPROVED | REJECTED | CANCELLED | EXPIRED
+  status           String   @default("PENDING")
+  
+  // Payment Evidence
+  proofUrl         String?
+  proofUploadedAt  DateTime?
+  
+  // Manager Review
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  reviewerNote     String?
+  
+  // Verification
+  verifiedBankTx   String?
+  verifiedDate     DateTime?
+  
+  // Expiration
+  expiresAt        DateTime
+  
+  // Timestamps
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  // Indexes
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([status, createdAt])
+  
+  @@map("boost_orders")
+}
+
+// ============================================
+// STAR CREDIT - Per-user Star balance (derived from unexpired batches)
+// ============================================
+
+model StarCredit {
+  id           String   @id @default(uuid()) @map("_id")
+  userId       String   @unique
+  
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  grantBatches StarGrantBatch[]
+  
+  @@map("star_credits")
+}
+
+// ============================================
+// STAR GRANT BATCH - Tracks Stars from each subscription grant
+// FIFO spending: oldest batches are spent first
+// ============================================
+
+model StarGrantBatch {
+  id              String   @id @default(uuid()) @map("_id")
+  
+  // User
+  userId          String
+  user            StarCredit @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  
+  // Unique grant reference (prevents duplicate grants)
+  // Format: "sub_<subscriptionId>" for idempotency
+  grantRef        String   @unique
+  
+  // Source
+  subscriptionId  String?  // If granted from subscription
+  packageId       String?  // Package that granted these stars
+  
+  // Amount tracking
+  originalAmount  Int      // Stars granted initially
+  remainingAmount Int      // Stars not yet spent (>= 0)
+  
+  // Expiration
+  expiresAt       DateTime // When these stars expire
+  
+  // Status
+  isExpired       Boolean  @default(false)
+  expiredAt       DateTime?
+  
+  // Transactions related to this batch
+  transactions    StarTransaction[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  
+  @@index([userId, expiresAt])
+  @@index([userId, isExpired])
+  
+  @@map("star_grant_batches")
+}
+
+// ============================================
+// STAR TRANSACTION - Auditable Star history
+// ============================================
+
+model StarTransaction {
+  id              String   @id @default(uuid()) @map("_id")
+  
+  // User
+  userId          String
+  
+  // Transaction type
+  // GRANT   - Stars awarded from subscription purchase/renewal
+  // SPEND   - Stars used to purchase VIP boost
+  // EXPIRE  - Expired Stars auto-deducted
+  // REFUND  - Stars returned (e.g., cancelled boost)
+  type            String   // GRANT | SPEND | EXPIRE | REFUND
+  
+  // Amount (always positive)
+  amount          Int
+  
+  // Balance after this transaction (for audit)
+  balanceAfter    Int
+  
+  // Description for user display
+  description     String
+  
+  // Batch reference (for SPEND/EXPIRE/REFUND)
+  grantBatchId    String?
+  grantBatch      StarGrantBatch? @relation(fields: [grantBatchId], references: [id])
+  
+  // Source tracking
+  subscriptionId  String?
+  listingId       String?
+  boostOrderId    String?
+  
+  // Timestamp
+  createdAt       DateTime @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([userId, type])
+  @@map("star_transactions")
 }

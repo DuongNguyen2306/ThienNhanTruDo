@@ -7,7 +7,7 @@ function LogoText() {
         THIÊN
       </span>
       <span className="text-xl font-black italic tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
-        DỮ
+              NHÃN
       </span>
       <span className="text-xl font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
         TRÚ ĐỒ
@@ -66,7 +66,7 @@ export function BrutalFooter() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 text-center text-xs text-white/40 sm:flex-row">
-          <p>© 2026 Thiên Dữ Trú Đồ — Số ĐKKD 0316-999-111 · Cơ quan cấp: Sở KH&ĐT TP.HCM</p>
+          <p>© 2026 Thiên Nhãn Trú Đồ — Số ĐKKD 0316-999-111 · Cơ quan cấp: Sở KH&ĐT TP.HCM</p>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
               <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>

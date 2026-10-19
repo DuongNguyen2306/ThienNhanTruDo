@@ -1,5 +1,7 @@
-import { ApprovalWorkspace } from '@/components/manager-portal'
+export const dynamic = 'force-dynamic'
+
+import { ApprovalsList } from '@/components/manager-portal'
 
 export default function ManagerApprovalsPage() {
-  return <ApprovalWorkspace />
+  return <ApprovalsList />
 }

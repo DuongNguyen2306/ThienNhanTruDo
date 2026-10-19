@@ -4,6 +4,7 @@ const sellerRoutes = require('./seller');
 const managerRoutes = require('./manager');
 const adminRoutes = require('./admin');
 const tenantRoutes = require('./tenant');
+const notificationRoutes = require('./notifications');
 
 module.exports = {
   authRoutes,
@@ -12,4 +13,5 @@ module.exports = {
   managerRoutes,
   adminRoutes,
   tenantRoutes,
+  notificationRoutes,
 };

@@ -1,0 +1,489 @@
+'use client'
+
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { ArrowRight, BadgeCheck, Building2, CheckCircle2, Clock, Eye, EyeOff, Home, Lock, MapPin, Phone, ShieldCheck, User as UserIcon } from 'lucide-react'
+import { BrutalHeader } from '@/components/brutal-header'
+import { useAuth } from '@/components/auth-provider'
+import { authApi, ApiError } from '@/lib/api'
+import { cn } from '@/lib/utils'
+
+type Purpose = 'tenant' | 'seller'
+
+const highlights = [
+  { icon: ShieldCheck, label: 'Cam kết hoàn cọc 100%', detail: 'Nếu thông tin phòng khác thực tế' },
+  { icon: BadgeCheck, label: 'Manager kiểm định từng tin', detail: 'Địa chỉ, giá, ảnh đều đối soát' },
+  { icon: CheckCircle2, label: 'Thanh toán an toàn qua VNPay', detail: 'Không chuyển tiền trực tiếp cho chủ nhà' },
+]
+
+export default function RegisterPage() {
+  const router = useRouter()
+  const { login } = useAuth()
+  const [purpose, setPurpose] = useState<Purpose>('tenant')
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  // Seller-specific fields
+  const [idNumber, setIdNumber] = useState('')
+  const [brand, setBrand] = useState('')
+  const [address, setAddress] = useState('')
+
+  useEffect(() => {
+    document.body.style.overflow = 'auto'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  const isSeller = purpose === 'seller'
+
+  const validateForm = () => {
+    if (!fullName.trim()) return 'Vui lòng nhập họ tên'
+    if (!phone.trim() || phone.replace(/\s/g, '').length < 9) return 'Số điện thoại không hợp lệ'
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+      return 'Mật khẩu tối thiểu 8 ký tự, có chữ hoa và số'
+    }
+    if (password !== confirm) return 'Mật khẩu xác nhận không khớp'
+
+    // Seller-specific validation
+    if (isSeller) {
+      if (!idNumber.trim()) return 'Vui lòng nhập số CCCD'
+      if (idNumber.replace(/\s/g, '').length < 9) return 'Số CCCD không hợp lệ'
+      if (!address.trim()) return 'Vui lòng nhập địa chỉ thường trú'
+    }
+
+    return null
+  }
+
+  const onSubmit = async () => {
+    const validationError = validateForm()
+    if (validationError) return setError(validationError)
+
+    setError('')
+    setLoading(true)
+
+    try {
+      const { user: apiUser, token } = await authApi.register({
+        fullName: fullName.trim(),
+        phone: phone.replace(/\s/g, ''),
+        email: email.trim() || undefined,
+        password,
+        role: purpose,
+      })
+
+      localStorage.setItem('token', token)
+
+      const sessionUser: import('@/lib/auth').SessionUser = {
+        id: apiUser.id,
+        role: apiUser.role,
+        fullName: apiUser.fullName,
+        name: apiUser.name,
+        email: apiUser.email,
+        phone: apiUser.phone,
+        initials: apiUser.initials,
+        title: apiUser.title,
+        sellerStatus: apiUser.sellerStatus ?? 'none',
+        sellerProfile: apiUser.sellerProfile ? {
+          ...apiUser.sellerProfile,
+          idNumber: apiUser.sellerProfile.idNumber ?? '',
+        } : undefined,
+      }
+
+      login(sessionUser)
+
+      // Redirect to login page with success message
+      router.push('/dang-nhap?registered=1')
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Đăng ký thất bại. Vui lòng thử lại.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F0]">
+      <BrutalHeader />
+
+      {/* Main Content Grid */}
+      <div className="grid min-h-[calc(100vh-68px)] lg:grid-cols-[58%_42%]">
+
+        {/* ── LEFT: Register Form ── */}
+        <div className="flex justify-center bg-white px-8 py-12 lg:px-16">
+          <div className="w-full max-w-md">
+
+            {/* Header */}
+            <div className="mb-6">
+              <h1
+                className="text-2xl font-black text-[#151515] lg:text-3xl"
+                style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+              >
+                TẠO TÀI KHOẢN
+              </h1>
+              <p className="mt-1 text-sm text-[#151515]/60">
+                Chọn vai trò và điền thông tin để bắt đầu.
+              </p>
+            </div>
+
+            {/* Form Card */}
+            <div className="rounded-2xl border-[3px] border-[#151515] bg-[#F5F5F0] p-5 shadow-[5px_5px_0_#151515]">
+
+              {/* Role Selection */}
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPurpose('tenant')}
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border-[2px] p-3.5 transition-all',
+                    purpose === 'tenant'
+                      ? 'border-[#151515] bg-[#FDE047] shadow-[2px_2px_0_#151515]'
+                      : 'border-[#151515] bg-white shadow-[2px_2px_0_#151515] hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]'
+                  )}
+                >
+                  <span className={cn(
+                    'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                    purpose === 'tenant' ? 'bg-white' : 'bg-[#F5F5F0]'
+                  )}>
+                    <Home className={cn('size-5', purpose === 'tenant' ? 'text-[#151515]' : 'text-[#151515]/60')} />
+                  </span>
+                  <span>
+                    <b className={cn('block text-sm', purpose === 'tenant' ? 'text-[#151515]' : 'text-[#151515]/70')}>Người thuê</b>
+                    <span className="mt-0.5 block text-xs text-[#151515]/50">Tìm và thuê phòng</span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPurpose('seller')}
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border-[2px] p-3.5 transition-all',
+                    purpose === 'seller'
+                      ? 'border-[#151515] bg-[#FDE047] shadow-[2px_2px_0_#151515]'
+                      : 'border-[#151515] bg-white shadow-[2px_2px_0_#151515] hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]'
+                  )}
+                >
+                  <span className={cn(
+                    'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                    purpose === 'seller' ? 'bg-white' : 'bg-[#F5F5F0]'
+                  )}>
+                    <Building2 className={cn('size-5', purpose === 'seller' ? 'text-[#151515]' : 'text-[#151515]/60')} />
+                  </span>
+                  <span>
+                    <b className={cn('block text-sm', purpose === 'seller' ? 'text-[#151515]' : 'text-[#151515]/70')}>Chủ đăng tin</b>
+                    <span className="mt-0.5 block text-xs text-[#151515]/50">Đăng và quản lý phòng</span>
+                  </span>
+                </button>
+              </div>
+
+              {/* Form Fields */}
+              <div className="grid gap-4">
+
+                {/* Full Name */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                    Họ và tên
+                  </label>
+                  <div className="relative">
+                    <UserIcon className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                      placeholder="VD: Nguyễn Văn A"
+                    />
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                    Số điện thoại
+                  </label>
+                  <div className="relative">
+                    <Phone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                      placeholder="0xxx xxx xxx"
+                    />
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                    Email <span className="font-normal text-[#151515]/50">(tuỳ chọn)</span>
+                  </label>
+                  <div className="relative">
+                    <svg className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="20" height="16" x="2" y="4" rx="2"/>
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                    </svg>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                      placeholder="email@example.com"
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                    Mật khẩu
+                  </label>
+                  <div className="relative">
+                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-12 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                      placeholder="Tối thiểu 8 ký tự, có chữ hoa và số"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#151515]/40 transition-colors hover:text-[#151515]"
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                    Xác nhận mật khẩu
+                  </label>
+                  <div className="relative">
+                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                    <input
+                      type={showConfirm ? 'text' : 'password'}
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+                      className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-12 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                      placeholder="Nhập lại mật khẩu"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm((v) => !v)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#151515]/40 transition-colors hover:text-[#151515]"
+                      aria-label={showConfirm ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Seller-specific fields */}
+                {isSeller && (
+                  <div className="mt-2 grid gap-4 rounded-xl border-[2px] border-[#151515]/30 bg-[#151515]/5 p-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-[#151515]">
+                      <Building2 className="size-4" />
+                      Thông tin chủ đăng tin
+                    </div>
+
+                    {/* CCCD */}
+                    <div>
+                      <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                        CCCD <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <UserIcon className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                        <input
+                          type="text"
+                          value={idNumber}
+                          onChange={(e) => setIdNumber(e.target.value)}
+                          className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                          placeholder="VD: 079123456789"
+                          maxLength={12}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tên thương hiệu */}
+                    <div>
+                      <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                        Tên thương hiệu <span className="font-normal text-[#151515]/50">(tuỳ chọn)</span>
+                      </label>
+                      <div className="relative">
+                        <Building2 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                        <input
+                          type="text"
+                          value={brand}
+                          onChange={(e) => setBrand(e.target.value)}
+                          className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                          placeholder="VD: Nhà trọ Bình An"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Địa chỉ */}
+                    <div>
+                      <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                        Địa chỉ thường trú <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <MapPin className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                        <input
+                          type="text"
+                          value={address}
+                          onChange={(e) => setAddress(e.target.value)}
+                          className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                          placeholder="VD: 123 Nguyễn Trãi, Q1, TP.HCM"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Note */}
+                    <div className="flex items-start gap-2 rounded-lg border border-[#151515]/20 bg-white p-3">
+                      <Clock className="mt-0.5 size-4 shrink-0 text-[#151515]/50" />
+                      <p className="text-xs text-[#151515]/60">
+                        Tài khoản chủ đăng tin cần được Manager duyệt trước khi đăng tin. Thời gian duyệt: 24-48 giờ.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Message */}
+                {error && (
+                  <div className="flex items-start gap-2 rounded-xl border-[2px] border-red-500 bg-red-50 p-3">
+                    <span className="text-sm text-red-500">⚠️</span>
+                    <p className="text-sm font-medium text-red-600">{error}</p>
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={loading}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#FDE047] text-base font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <span className="size-4 animate-spin rounded-full border-2 border-[#151515] border-t-transparent" />
+                      Đang đăng ký...
+                    </>
+                  ) : (
+                    <>
+                      Tạo tài khoản
+                      <ArrowRight className="size-5" />
+                    </>
+                  )}
+                </button>
+
+                {/* Login Link */}
+                <p className="text-center text-sm text-[#151515]/60">
+                  Đã có tài khoản?{' '}
+                  <Link href="/dang-nhap" className="font-bold text-[#059669] hover:underline">
+                    Đăng nhập
+                  </Link>
+                </p>
+              </div>
+            </div>
+
+            {/* Footer Note */}
+            <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-[#151515]/50">
+              <ShieldCheck className="size-3.5 text-[#059669]" />
+              THIÊN NHÃN TRÚ ĐỒ xác thực SĐT để chống tài khoản ảo.
+            </p>
+          </div>
+        </div>
+
+        {/* ── RIGHT: Branding Panel ── */}
+        <div className="hidden lg:flex lg:w-full lg:min-w-0 flex-col items-start bg-[#FDE047] px-12 py-12">
+          <div className="w-full max-w-2xl">
+
+            {/* Heading */}
+            <h2
+              className="text-4xl font-black leading-tight text-[#151515] xl:text-5xl"
+              style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+            >
+              Tìm phòng thật — thuê đúng người.
+            </h2>
+
+            {/* Logo Badge */}
+            <div className="mt-4 inline-flex items-center gap-2 rounded-xl border-[3px] border-[#151515] bg-white px-5 py-2.5 text-sm font-black text-[#151515] shadow-[3px_3px_0_#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+              <ShieldCheck className="size-5" />
+              THIÊN NHÃN TRÚ ĐỒ
+            </div>
+
+            {/* Description */}
+            <p className="mt-5 max-w-lg text-base leading-relaxed text-[#151515]/70">
+              Thiên Nhãn Trú Đồ kết nối người thuê với chủ trọ đã qua kiểm định, giúp hàng nghìn sinh viên và người đi làm thuê đúng phòng, đúng giá.
+            </p>
+
+            {/* Illustration */}
+            <div className="mt-8 flex items-center justify-start">
+              <div className="relative">
+                {/* Main Building */}
+                <div className="relative rounded-2xl border-[3px] border-[#151515] bg-white p-6 shadow-[5px_5px_0_#151515]">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[...Array(9)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="size-6 rounded-lg border-[2px] border-[#151515] bg-[#FDE047]"
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-3 h-12 rounded-lg border-[2px] border-[#151515] bg-[#059669]" />
+                </div>
+
+                {/* Floating Icons */}
+                <div className="absolute -right-6 -top-3 rounded-xl border-[2px] border-[#151515] bg-white p-3 shadow-[4px_4px_0_#151515]">
+                  <CheckCircle2 className="size-6 text-[#059669]" />
+                </div>
+                <div className="absolute -left-5 bottom-4 rounded-xl border-[2px] border-[#151515] bg-white p-2 shadow-[4px_4px_0_#151515]">
+                  <UserIcon className="size-6 text-[#151515]" />
+                </div>
+                <div className="absolute -right-4 -bottom-5 rounded-xl border-[2px] border-[#151515] bg-white p-2 shadow-[4px_4px_0_#151515]">
+                  <MapPin className="size-6 text-[#059669]" />
+                </div>
+              </div>
+            </div>
+
+            {/* Highlights */}
+            <div className="mt-8 flex flex-col gap-3">
+              {highlights.map((h, i) => {
+                const Icon = h.icon
+                return (
+                  <div
+                    key={i}
+                    className="flex items-start gap-4 rounded-xl border-[2px] border-[#151515] bg-white p-4 shadow-[3px_3px_0_#151515]"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-[#FDE047] text-[#151515] shadow-[2px_2px_0_#151515]">
+                      <Icon className="size-5" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-bold text-[#151515]">{h.label}</p>
+                      <p className="mt-0.5 text-xs text-[#151515]/60">{h.detail}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

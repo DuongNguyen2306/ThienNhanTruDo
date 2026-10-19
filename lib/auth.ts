@@ -1,15 +1,15 @@
 export type Role = 'tenant' | 'seller' | 'manager' | 'admin'
 
-export type SellerStatus = 'none' | 'pending' | 'active' | 'rejected'
+export type SellerStatus = 'none' | 'pending' | 'active' | 'rejected' | 'suspended'
 
 export type SellerProfile = {
-  idNumber: string
+  idNumber?: string
   brand?: string
-  address: string
-  docs: string[]
-  submittedAt: string
+  address?: string
+  docs?: string[]
+  submittedAt?: string
   reviewedAt?: string
-  reviewer?: string
+  reviewerId?: string
   reviewNote?: string
 }
 
@@ -35,10 +35,10 @@ export type AccountRecord = {
   id: string
   role: Role
   fullName: string
+  name: string
   email: string
   phone: string
   password: string
-  otp: string
   initials: string
   title: string
   sellerStatus: SellerStatus
@@ -49,8 +49,7 @@ export type AccountRecord = {
 
 export const SESSION_COOKIE = 'verirent_session'
 
-/** Server-side demo accounts — reads from env vars for production safety.
- * Credentials are compiled-in for local dev; override via .env.local for staging. */
+/** Server-side demo accounts */
 export const DEMO_ACCOUNTS: AccountRecord[] = [
   {
     id: 'u-tenant',
@@ -60,7 +59,6 @@ export const DEMO_ACCOUNTS: AccountRecord[] = [
     email: process.env.DEMO_TENANT_EMAIL ?? 'ha.nguyen@email.vn',
     phone: process.env.DEMO_TENANT_PHONE ?? '0918 334 221',
     password: process.env.DEMO_TENANT_PASSWORD ?? 'tenant123',
-    otp: process.env.DEMO_OTP ?? '123456',
     initials: 'NH',
     title: 'Người thuê (Tenant)',
     sellerStatus: 'none',
@@ -74,7 +72,6 @@ export const DEMO_ACCOUNTS: AccountRecord[] = [
     email: process.env.DEMO_SELLER_EMAIL ?? 'hello@minhanh.vn',
     phone: process.env.DEMO_SELLER_PHONE ?? '0903 112 334',
     password: process.env.DEMO_SELLER_PASSWORD ?? 'seller123',
-    otp: process.env.DEMO_OTP ?? '123456',
     initials: 'MA',
     title: 'Chủ đăng tin (Seller)',
     sellerStatus: 'active',
@@ -85,7 +82,7 @@ export const DEMO_ACCOUNTS: AccountRecord[] = [
       docs: ['cccd-front.jpg', 'cccd-back.jpg', 'so-do-nha.pdf'],
       submittedAt: '2026-06-10',
       reviewedAt: '2026-06-12',
-      reviewer: 'Mai Linh (Manager)',
+      reviewerId: 'u-manager',
     },
     createdAt: '2026-06-17',
   },
@@ -97,7 +94,6 @@ export const DEMO_ACCOUNTS: AccountRecord[] = [
     email: process.env.DEMO_SELLER_PENDING_EMAIL ?? 'vy.pham@email.vn',
     phone: process.env.DEMO_SELLER_PENDING_PHONE ?? '0938 445 110',
     password: process.env.DEMO_SELLER_PENDING_PASSWORD ?? 'pending123',
-    otp: process.env.DEMO_OTP ?? '123456',
     initials: 'PV',
     title: 'Chủ đăng tin (đang chờ duyệt)',
     sellerStatus: 'pending',
@@ -118,7 +114,6 @@ export const DEMO_ACCOUNTS: AccountRecord[] = [
     email: process.env.DEMO_MANAGER_EMAIL ?? 'mai.linh@verirent.vn',
     phone: process.env.DEMO_MANAGER_PHONE ?? '0909 000 111',
     password: process.env.DEMO_MANAGER_PASSWORD ?? 'manager123',
-    otp: process.env.DEMO_OTP ?? '123456',
     initials: 'ML',
     title: 'Ban quản lý (Manager)',
     sellerStatus: 'none',
@@ -132,15 +127,12 @@ export const DEMO_ACCOUNTS: AccountRecord[] = [
     email: process.env.DEMO_ADMIN_EMAIL ?? 'thao.nguyen@verirent.vn',
     phone: process.env.DEMO_ADMIN_PHONE ?? '0908 000 222',
     password: process.env.DEMO_ADMIN_PASSWORD ?? 'admin123',
-    otp: process.env.DEMO_OTP ?? '123456',
     initials: 'TN',
     title: 'Quản trị viên (Admin)',
     sellerStatus: 'none',
     createdAt: '2026-01-01',
   },
 ]
-
-export const DEMO_OTP = process.env.DEMO_OTP ?? '123456'
 
 /** Map id -> public session */
 export function toSession(acc: AccountRecord): SessionUser {
@@ -182,14 +174,14 @@ export function parseSession(raw: string | undefined | null): SessionUser | null
 
 /** Đường dẫn đích sau khi đăng nhập theo role */
 export const ROLE_HOME: Record<Role, string> = {
-  tenant: '/tai-khoan',
+  tenant: '/',
   seller: '/seller',
   manager: '/manager/approvals',
   admin: '/admin',
 }
 
 export const ROLE_PREFIX: Record<Role, string[]> = {
-  tenant: ['/tai-khoan'],
+  tenant: ['/', '/tai-khoan'],
   seller: ['/seller'],
   manager: ['/manager'],
   admin: ['/admin'],

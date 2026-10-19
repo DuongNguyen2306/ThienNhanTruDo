@@ -2,8 +2,26 @@
 
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import type { Listing } from '@/lib/data'
 import { formatVnd } from '@/lib/data'
+
+// Flexible listing type for map markers
+interface MapListing {
+  id: string
+  title: string
+  image?: string
+  photos?: unknown[]
+  lat?: number
+  lng?: number
+  rent?: number
+  district?: string
+  city?: string
+  roomType?: string
+  address?: string
+  amenities?: unknown[]
+  vip?: boolean
+  verified?: boolean
+  [key: string]: unknown
+}
 
 // ─── Static data: tiện ích xung quanh Thảo Điền / Quận 2 ───────────────────
 const AMENITIES = [
@@ -36,7 +54,7 @@ function RealMapInner({
   selectedId,
   onSelect,
 }: {
-  listings: Listing[]
+  listings: MapListing[]
   selectedId?: string
   onSelect?: (id: string) => void
 }) {
@@ -49,33 +67,42 @@ function RealMapInner({
     Circle: any
     useMap: any
   } | null>(null)
-
+  const markerClassRef = useRef<any>(null)
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
   const [locStatus, setLocStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
   const [locError, setLocError] = useState<string | null>(null)
   const watchId = useRef<number | null>(null)
 
+  // Guard: chỉ render khi đã mounted (client-side only)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Load toàn bộ leaflet + react-leaflet phía client
   useEffect(() => {
+    if (!mounted) return
     let cancelled = false
     Promise.all([import('leaflet'), import('react-leaflet')]).then(([leafletMod, rlMod]) => {
       if (cancelled) return
       // Import CSS side-effect
       import('leaflet/dist/leaflet.css')
+      const MarkerClass = (rlMod as any).Marker
       setModules({
         L: (leafletMod as any).default ?? leafletMod,
         MapContainer: (rlMod as any).MapContainer,
         TileLayer: (rlMod as any).TileLayer,
-        Marker: (rlMod as any).Marker,
+        Marker: MarkerClass,
         Popup: (rlMod as any).Popup,
         Circle: (rlMod as any).Circle,
         useMap: (rlMod as any).useMap,
       })
+      markerClassRef.current = MarkerClass
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [mounted])
 
   useEffect(() => {
     return () => {
@@ -115,6 +142,15 @@ function RealMapInner({
     )
   }
 
+  // Guard: không render gì cả nếu chưa mounted (tránh SSR/hydration lỗi)
+  if (!mounted) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-slate-400">
+        Đang tải bản đồ...
+      </div>
+    )
+  }
+
   if (!modules) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-400">
@@ -125,14 +161,27 @@ function RealMapInner({
 
   const { L, MapContainer, TileLayer, Marker, Popup, Circle, useMap } = modules
 
-  // Fly to selected listing
+  // Fly to selected listing + auto-open popup
   function FlyToSelected() {
     const map = useMap()
+    
     useEffect(() => {
       if (!selectedId) return
       const listing = listings.find((l) => l.id === selectedId)
-      if (!listing) return
+      if (!listing || listing.lat == null || listing.lng == null) return
       map.flyTo([listing.lat, listing.lng], 15, { duration: 0.8 })
+      // Auto open popup after fly animation
+      setTimeout(() => {
+        map.eachLayer((layer: any) => {
+          // Find marker by position match
+          if (layer.getLatLng) {
+            const pos = layer.getLatLng()
+            if (pos.lat === listing.lat && pos.lng === listing.lng) {
+              layer.openPopup()
+            }
+          }
+        })
+      }, 900)
     }, [selectedId, map])
     return null
   }
@@ -172,7 +221,7 @@ function RealMapInner({
     )
   }
 
-  const makePriceIcon = (listing: Listing, isSelected: boolean) => {
+  const makePriceIcon = (listing: MapListing, isSelected: boolean) => {
     const color = listing.vip ? '#047857' : '#059669'
     const fontSize = listing.vip ? 11 : 10
     return L.divIcon({
@@ -190,7 +239,7 @@ function RealMapInner({
         white-space:nowrap;
         cursor:pointer;
         font-family:system-ui,-apple-system,sans-serif;
-      ">${priceLabel(listing.rent)}</div>`,
+      ">${priceLabel(listing.rent ?? 0)}</div>`,
       iconSize: [0, 0],
       iconAnchor: [0, 0],
     })
@@ -246,7 +295,7 @@ function RealMapInner({
 
       {userPos && <Marker position={userPos} icon={userIcon} />}
 
-      {selectedListing && (
+      {selectedListing && selectedListing.lat != null && selectedListing.lng != null && (
         <Circle
           center={[selectedListing.lat, selectedListing.lng]}
           radius={500}
@@ -265,23 +314,31 @@ function RealMapInner({
       ))}
 
       {listings.map((listing, idx) => {
+        if (listing.lat == null || listing.lng == null) return null
         const isSelected = listing.id === selectedId
+        const popupId = `popup-${listing.id}`
         return (
           <Marker
             key={listing.id}
             position={[listing.lat, listing.lng]}
             icon={makePriceIcon(listing, isSelected)}
-            eventHandlers={{ click: () => onSelect?.(listing.id) }}
+            eventHandlers={{
+              click: (e) => {
+                // Open popup and trigger select
+                e.target.openPopup()
+                onSelect?.(listing.id)
+              }
+            }}
           >
-            <Popup>
-              <div style={{ minWidth: 220, fontFamily: 'system-ui, sans-serif' }}>
-                <div style={{ width: '100%', height: 120, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+            <Popup autoPan={true} closeButton={true} maxWidth={280} id={popupId}>
+              <div style={{ minWidth: 220, fontFamily: 'system-ui, sans-serif', padding: '4px 0' }}>
+                <a href={`/phong/${listing.id}`} style={{ display: 'block', width: '100%', height: '120px', borderRadius: 8, overflow: 'hidden', marginBottom: 10, cursor: 'pointer' }}>
                   <img
                     src={listing.image ?? POPUP_IMGS[idx % POPUP_IMGS.length]}
                     alt={listing.title}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
-                </div>
+                </a>
                 <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
                   {listing.vip && (
                     <span style={{ background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999 }}>
@@ -293,19 +350,21 @@ function RealMapInner({
                       Đã xác thực
                     </span>
                   )}
-                  <span style={{ background: '#f1f5f9', color: '#475569', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999 }}>
-                    {listing.roomType}
-                  </span>
+                  {listing.roomType && (
+                    <span style={{ background: '#f1f5f9', color: '#475569', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999 }}>
+                      {String(listing.roomType)}
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: '#0f172a', lineHeight: 1.3 }}>
                   {listing.title}
                 </p>
-                <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{listing.address}</p>
+                <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{(listing as any).address || `${listing.district || ''}, ${listing.city || ''}`.trim()}</p>
                 <p style={{ fontSize: 15, fontWeight: 800, color: '#059669', marginBottom: 10 }}>
-                  {formatVnd(listing.rent)}<span style={{ fontSize: 11, fontWeight: 500 }}>/tháng</span>
+                  {formatVnd(listing.rent ?? 0)}<span style={{ fontSize: 11, fontWeight: 500 }}>/tháng</span>
                 </p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {listing.amenities.slice(0, 3).map((am) => (
+                  {((listing.amenities as string[]) ?? []).slice(0, 3).map((am) => (
                     <span key={am} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 10, color: '#475569', padding: '2px 6px', borderRadius: 4 }}>
                       {am}
                     </span>
@@ -313,6 +372,10 @@ function RealMapInner({
                 </div>
                 <a
                   href={`/phong/${listing.id}`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    window.location.href = `/phong/${listing.id}`
+                  }}
                   style={{
                     display: 'block',
                     textAlign: 'center',
@@ -320,12 +383,13 @@ function RealMapInner({
                     color: '#fff',
                     fontSize: 12,
                     fontWeight: 700,
-                    padding: '8px 0',
+                    padding: '10px 0',
                     borderRadius: 8,
                     textDecoration: 'none',
+                    cursor: 'pointer',
                   }}
                 >
-                  Xem chi tiết
+                  Xem chi tiết →
                 </a>
               </div>
             </Popup>
@@ -348,7 +412,7 @@ const RealMapClient = dynamic(() => Promise.resolve(RealMapInner), {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 export type RealMapProps = {
-  listings: Listing[]
+  listings: MapListing[]
   selectedId?: string
   onSelect?: (id: string) => void
   height?: string

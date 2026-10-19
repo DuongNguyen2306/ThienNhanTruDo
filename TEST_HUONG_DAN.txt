@@ -1,0 +1,125 @@
+# HƯỚNG DẪN TEST WEBSITE VERIRENT
+
+## TRƯỚC KHI TEST
+
+### 1. Khởi động Backend
+```bash
+cd D:\WEB khai\web\backend
+npm run dev
+```
+
+### 2. Khởi động Frontend
+```bash
+cd D:\WEB khai\web
+npm run dev
+```
+
+---
+
+## LUỒNG TEST 1: BỘ LỌC TÌM KIẾM (Trang /tim-kiem)
+
+### Bước 1: Mở trang tìm kiếm
+- Truy cập: http://localhost:3000/tim-kiem
+
+### Bước 2: Test bộ lọc "Đã xác minh"
+1. Click vào toggle "Đã xác minh" (ô vuông bên cạnh)
+2. → Chờ kết quả load
+3. → KIỂM TRA: Chỉ hiện các tin có badge "Đã xác minh" màu vàng
+4. → Tắt toggle → hiện tất cả tin
+
+### Bước 3: Test bộ lọc "Trống ngay"
+1. Click vào toggle "Trống ngay"
+2. → KIỂM TRA: Chỉ hiện các tin có trạng thái "Trống ngay"
+3. → Tắt toggle → hiện tất cả tin (kể cả đã cho thuê)
+
+### Bước 4: Test kết hợp cả 2 bộ lọc
+1. Bật cả 2 toggle
+2. → KIỂM TRA: Hiện tin vừa "Đã xác minh" VÀ "Trống ngay"
+
+---
+
+## LUỒNG TEST 2: TRANG CHI TIẾT PHÒNG (Trang /phong/[id])
+
+### Bước 1: Mở trang chi tiết
+- Từ trang tìm kiếm, click vào 1 tin bất kỳ
+
+### Bước 2: Test nút TIM LƯU TIN
+1. **Chưa đăng nhập:**
+   - Click vào icon tim (♡)
+   - → HIỂN THỊ: Alert "Vui lòng đăng nhập để lưu tin!"
+
+2. **Đăng nhập:**
+   - Đăng nhập với tài khoản tenant
+   - Quay lại trang chi tiết
+   - Click icon tim:
+     - → TIM ĐỔI MÀU ĐỎ (♡ → ♥)
+     - → CÓ ANIMATION nhấn
+   - Click lại:
+     - → TIM TRỞ LẠI MÀU TRẮNG (♥ → ♡)
+
+### Bước 3: Kiểm tra Badge VIP (màu xanh)
+1. Tìm 1 tin có badge ⭐ VIP
+2. → KIỂM TRA: Badge VIP màu XANH LÁ (#10b981 → #22c55e)
+   - KHÔNG phải màu hồng!
+   - Có viền đen
+   - Có shadow glow xanh
+
+### Bước 4: Kiểm tra Badge Đã xác minh
+1. Tìm 1 tin có badge "Đã xác minh"
+2. → KIỂM TRA: Badge màu VÀNG (#FDE047)
+3. → Có icon BadgeCheck
+
+---
+
+## LUỒNG TEST 3: TRANG TÀI KHOẢN - TIN ĐÃ LƯU (/tai-khoan/da-luu)
+
+### Bước 1: Kiểm tra tin đã lưu
+1. Đăng nhập với tài khoản tenant
+2. Truy cập: http://localhost:3000/tai-khoan/da-luu
+3. → KIỂM TRA: Hiện danh sách tin đã lưu
+4. → Nhấn tim ở trang chi tiết → tin xuất hiện ở đây
+
+---
+
+## CHECKLIST TEST
+
+### ✅ BỘ LỌC TÌM KIẾM
+- [ ] Toggle "Đã xác minh" hoạt động
+- [ ] Toggle "Trống ngay" hoạt động  
+- [ ] Không có lỗi console khi bật/tắt
+
+### ✅ TRANG CHI TIẾT
+- [ ] Badge VIP màu XANH (không hồng)
+- [ ] Nút tim lưu/bỏ lưu hoạt động
+- [ ] Icon tim đổi màu khi lưu
+- [ ] Alert khi chưa đăng nhập
+
+### ✅ TRANG TÀI KHOẢN
+- [ ] Danh sách tin đã lưu hiển thị đúng
+
+---
+
+## CÁC LỖI ĐÃ FIX (ĐỂ TESTER BIẾT)
+
+1. **Bug bộ lọc:** Backend mặc định `vacantNow = true` → luôn lọc trống ngay
+   - Fix: Bỏ default, chỉ lọc khi user bật toggle
+
+2. **Bug bộ lọc:** Backend không nhận param `verified`
+   - Fix: Thêm parse verified từ query
+
+3. **Bug boolean:** API gửi string "true" thay vì boolean
+   - Fix: Backend parse string thành boolean
+
+4. **Bug VIP:** Badge VIP hiện màu hồng thay vì xanh
+   - Fix: Dùng inline style background thay vì Tailwind gradient
+
+5. **Thiếu chức năng:** Trang chi tiết không có nút lưu tin
+   - Fix: Thêm nút tim với logic save/unsave
+
+---
+
+## MÔI TRƯỜNG TEST
+- Backend: http://localhost:3001
+- Frontend: http://localhost:3000
+- Database: SQLite (dev.db)
+- Framework: Next.js 16 + Prisma

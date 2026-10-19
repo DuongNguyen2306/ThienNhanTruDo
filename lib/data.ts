@@ -1,4 +1,4 @@
-export type RoomType = 'Phòng trọ khép kín' | 'Chung cư mini' | 'Căn hộ dịch vụ' | 'Ký túc xá'
+export type RoomType = string // Accepts: 'phong-tro' | 'chung-cu-mini' | 'nha-tro' | 'can-ho'
 export type ListingStatus = 'draft' | 'pending' | 'active' | 'rejected' | 'inactive'
 export type PhotoSource = 'host' | 'manager'
 
@@ -18,9 +18,9 @@ export type Listing = {
   rent: number
   depositMonths: number
   electricity: number
-  electricityType: 'Nhà nước' | 'Kinh doanh'
+  electricityType: 'Nhà nước' | 'Kinh doanh' | 'state' | 'business'
   water: number
-  waterType: 'Theo khối' | 'Đầu người'
+  waterType: 'Theo khối' | 'Đầu người' | 'unit' | 'person'
   internet: number
   sanitation: number
   parkingBike: number
@@ -262,9 +262,9 @@ export const reviews = [
 ]
 
 export const appointments = [
-  { id: 'ap-01', listingId: 'vr-1052', listingTitle: 'Căn hộ Lumière Thảo Điền', seller: 'Minh Anh Realty', when: '29/09/2026 · 10:00', status: 'Chờ duyệt' as const, phone: '0903 112 334' },
-  { id: 'ap-02', listingId: 'vr-1031', listingTitle: 'The Marq Residences', seller: 'Minh Anh Realty', when: '25/09/2026 · 16:30', status: 'Đã chốt' as const, phone: '0903 112 334' },
-  { id: 'ap-03', listingId: 'vr-1018', listingTitle: 'Green Nest Bình Thạnh', seller: 'Green Nest Homes', when: '20/09/2026 · 09:00', status: 'Đã hủy' as const, phone: '0912 445 778' },
+  { id: 'ap-01', listingId: 'vr-1052', listingTitle: 'Căn hộ Lumière Thảo Điền', seller: 'Minh Anh Realty', when: '29/09/2026 · 10:00', status: 'Chờ duyệt' as const, phone: '0903 112 334', createdAt: '2026-09-28T10:00:00Z' },
+  { id: 'ap-02', listingId: 'vr-1031', listingTitle: 'The Marq Residences', seller: 'Minh Anh Realty', when: '25/09/2026 · 16:30', status: 'Đã chốt' as const, phone: '0903 112 334', createdAt: '2026-09-24T16:30:00Z' },
+  { id: 'ap-03', listingId: 'vr-1018', listingTitle: 'Green Nest Bình Thạnh', seller: 'Green Nest Homes', when: '20/09/2026 · 09:00', status: 'Đã hủy' as const, phone: '0912 445 778', createdAt: '2026-09-19T09:00:00Z' },
 ]
 
 export const sellerLeads = [

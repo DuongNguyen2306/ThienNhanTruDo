@@ -1,0 +1,1517 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Thiên Nhãn Trú Đồ API",
+    "version": "1.0.0",
+    "description": "Backend API cho nền tảng thuê phòng minh bạch tại Việt Nam. Địa chỉ thực: TP Hồ Chí Minh.",
+    "contact": {
+      "name": "Thiên Nhãn Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3005",
+      "description": "Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token được trả về từ /api/auth/login. Dán token vào đây (không cần prefix 'Bearer ')"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Thông báo lỗi"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "description": "User ID" },
+          "phone": { "type": "string", "description": "Số điện thoại" },
+          "email": { "type": "string", "nullable": true, "description": "Email" },
+          "fullName": { "type": "string", "description": "Họ tên đầy đủ" },
+          "role": { "type": "string", "enum": ["tenant", "seller", "manager", "admin"] },
+          "initials": { "type": "string", "description": "Chữ cái đầu tên (VD: 'NA')" },
+          "title": { "type": "string", "description": "Chức danh tiếng Việt" }
+        }
+      },
+      "SellerProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "idNumber": { "type": "string", "nullable": true, "description": "Số CCCD" },
+          "brand": { "type": "string", "nullable": true, "description": "Thương hiệu/Công ty" },
+          "address": { "type": "string", "nullable": true, "description": "Địa chỉ kinh doanh" },
+          "docs": { "type": "array", "items": { "type": "string" }, "nullable": true, "description": "Danh sách tài liệu" },
+          "status": { "type": "string", "enum": ["none", "pending", "active", "rejected"] },
+          "trustScore": { "type": "number", "nullable": true, "description": "Điểm tin cậy (0-100)" },
+          "responseRate": { "type": "number", "nullable": true, "description": "Tỷ lệ phản hồi (%)" },
+          "submittedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "reviewedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "reviewerId": { "type": "string", "nullable": true }
+        }
+      },
+      "Listing": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "sellerId": { "type": "string" },
+          "title": { "type": "string" },
+          "roomType": { "type": "string", "enum": ["phong-tro", "chung-cu-mini", "nha-tro", "can-ho"] },
+          "houseNumber": { "type": "string", "nullable": true },
+          "alley": { "type": "string", "nullable": true },
+          "street": { "type": "string", "nullable": true },
+          "ward": { "type": "string", "nullable": true },
+          "district": { "type": "string", "nullable": true },
+          "city": { "type": "string", "default": "TP Hồ Chí Minh" },
+          "rent": { "type": "number", "description": "Giá thuê/tháng (VND)" },
+          "depositMonths": { "type": "number", "default": 1 },
+          "electricity": { "type": "number", "nullable": true, "description": "Tiền điện (VND/kWh)" },
+          "water": { "type": "number", "nullable": true, "description": "Tiền nước (VND/m³)" },
+          "internet": { "type": "number", "nullable": true },
+          "managementFee": { "type": "number", "nullable": true },
+          "area": { "type": "number", "nullable": true, "description": "Diện tích (m²)" },
+          "furniture": { "type": "boolean", "default": false, "description": "Có nội thất" },
+          "pets": { "type": "boolean", "default": false, "description": "Cho phép nuôi pet" },
+          "vacantNow": { "type": "boolean", "default": true, "description": "Còn trống" },
+          "verified": { "type": "boolean", "default": false, "description": "Đã kiểm định" },
+          "vip": { "type": "boolean", "default": false, "description": "Tin VIP" },
+          "highTrust": { "type": "boolean", "default": false, "description": "Độ tin cậy cao" },
+          "status": { "type": "string", "enum": ["draft", "pending", "active", "rejected", "inactive"] },
+          "views": { "type": "number", "default": 0 },
+          "rating": { "type": "number", "nullable": true },
+          "reviewCount": { "type": "number", "default": 0 },
+          "photos": { "type": "array", "items": { "type": "string" }, "description": "URL ảnh" },
+          "amenities": { "type": "array", "items": { "type": "string" }, "description": "Tiện ích: wifi, máy lạnh,..." },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "number" },
+          "limit": { "type": "number" },
+          "total": { "type": "number" },
+          "totalPages": { "type": "number" }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "tags": [
+    { "name": "Auth", "description": "Xác thực & Đăng nhập" },
+    { "name": "Listings", "description": "Tin đăng (Public)" },
+    { "name": "Seller", "description": "Quản lý tin đăng (Seller)" },
+    { "name": "Tenant", "description": "Người thuê" },
+    { "name": "Manager", "description": "Quản lý & Duyệt tin (Manager)" },
+    { "name": "Admin", "description": "Quản trị hệ thống (Admin)" },
+    { "name": "Payment", "description": "Thanh toán VNPay" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Kiểm tra server đang chạy",
+        "tags": ["System"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Server healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "timestamp": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "summary": "Đăng ký tài khoản mới",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "password", "fullName"],
+                "properties": {
+                  "phone": { "type": "string", "example": "0903123456", "description": "SĐT Việt Nam" },
+                  "password": { "type": "string", "example": "Matkhau123", "minLength": 6 },
+                  "fullName": { "type": "string", "example": "Nguyễn Văn A" },
+                  "email": { "type": "string", "example": "email@example.com" },
+                  "role": { "type": "string", "enum": ["tenant", "seller"], "default": "tenant" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Đăng ký thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "Đăng ký thành công" },
+                    "user": { "$ref": "#/components/schemas/User" },
+                    "token": { "type": "string", "description": "JWT token" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "SĐT hoặc email đã tồn tại", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Too many requests", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Đăng nhập bằng SĐT + Mật khẩu",
+        "description": "Xác thực và nhận JWT token. Token có thời hạn 7 ngày.",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "password"],
+                "properties": {
+                  "phone": { "type": "string", "example": "0903000001", "description": "Số điện thoại đã đăng ký" },
+                  "password": { "type": "string", "example": "123456", "description": "Mật khẩu" }
+                }
+              },
+              "example": {
+                "phone": "0903000001",
+                "password": "123456"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Đăng nhập thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "Đăng nhập thành công" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string", "example": "5afc0c82-3048-48f8-bf33-dd8812d75db1" },
+                        "phone": { "type": "string", "example": "0903000001" },
+                        "email": { "type": "string", "example": "vuthanhha@email.com" },
+                        "fullName": { "type": "string", "example": "Vũ Thanh Hà" },
+                        "role": { "type": "string", "enum": ["tenant", "seller", "manager", "admin"], "example": "manager" },
+                        "initials": { "type": "string", "example": "VH" },
+                        "title": { "type": "string", "example": "Ban quản lý" }
+                      }
+                    },
+                    "token": { "type": "string", "description": "JWT token để xác thực các request sau" }
+                  }
+                },
+                "example": {
+                  "message": "Đăng nhập thành công",
+                  "user": {
+                    "id": "5afc0c82-3048-48f8-bf33-dd8812d75db1",
+                    "phone": "0903000001",
+                    "email": "vuthanhha@email.com",
+                    "fullName": "Vũ Thanh Hà",
+                    "role": "manager",
+                    "initials": "VH",
+                    "title": "Ban quản lý"
+                  },
+                  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "SĐT hoặc mật khẩu không đúng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Quá nhiều lần đăng nhập, vui lòng chờ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/otp/send": {
+      "post": {
+        "summary": "Gửi mã OTP",
+        "description": "Gửi mã xác thực qua SMS (demo mode: luôn trả về OTP = 123456)",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone"],
+                "properties": {
+                  "phone": { "type": "string", "example": "0903000001" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP đã gửi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "demo": { "type": "boolean" },
+                    "note": { "type": "string", "description": "Chỉ trong demo mode" }
+                  }
+                },
+                "example": {
+                  "message": "Mã OTP đã được gửi",
+                  "demo": true,
+                  "note": "Trong môi trường demo, mã OTP là: 123456"
+                }
+              }
+            }
+          },
+          "404": { "description": "Tài khoản không tồn tại", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Too many requests", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/otp/verify": {
+      "post": {
+        "summary": "Xác thực OTP",
+        "description": "Đăng nhập bằng mã OTP (demo: dùng 123456)",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "otp"],
+                "properties": {
+                  "phone": { "type": "string", "example": "0903000001" },
+                  "otp": { "type": "string", "example": "123456" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Xác thực thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/User" },
+                    "token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Mã OTP không đúng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Tài khoản không tồn tại", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Too many requests", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Lấy thông tin user hiện tại",
+        "description": "Xác thực token và trả về thông tin user đang đăng nhập",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Thông tin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "phone": { "type": "string" },
+                        "email": { "type": "string", "nullable": true },
+                        "fullName": { "type": "string" },
+                        "role": { "type": "string" },
+                        "initials": { "type": "string" },
+                        "title": { "type": "string" },
+                        "sellerProfile": { "$ref": "#/components/schemas/SellerProfile", "nullable": true }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "user": {
+                    "id": "5afc0c82-3048-48f8-bf33-dd8812d75db1",
+                    "phone": "0903000001",
+                    "email": "vuthanhha@email.com",
+                    "fullName": "Vũ Thanh Hà",
+                    "role": "manager",
+                    "initials": "VH",
+                    "title": "Ban quản lý",
+                    "sellerProfile": null
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token không hợp lệ hoặc hết hạn", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/profile": {
+      "put": {
+        "summary": "Cập nhật thông tin cá nhân",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": { "type": "string", "example": "Nguyễn Văn B" },
+                  "email": { "type": "string", "example": "newemail@example.com" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cập nhật thành công",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Chưa đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/password": {
+      "put": {
+        "summary": "Đổi mật khẩu",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword"],
+                "properties": {
+                  "currentPassword": { "type": "string" },
+                  "newPassword": { "type": "string", "minLength": 6 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Đổi mật khẩu thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+          "401": { "description": "Mật khẩu hiện tại không đúng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "summary": "Đăng xuất",
+        "description": "Đăng xuất (server ghi log audit)",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Đăng xuất thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+          "401": { "description": "Chưa đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/listings": {
+      "get": {
+        "summary": "Tìm kiếm tin đăng",
+        "description": "Tìm kiếm và lọc tin đăng đang active. Không cần đăng nhập.",
+        "tags": ["Listings"],
+        "security": [],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 50 } },
+          { "name": "roomType", "in": "query", "schema": { "type": "string", "enum": ["phong-tro", "chung-cu-mini", "nha-tro", "can-ho"] } },
+          { "name": "minRent", "in": "query", "schema": { "type": "number" }, "description": "Giá thuê tối thiểu" },
+          { "name": "maxRent", "in": "query", "schema": { "type": "number" }, "description": "Giá thuê tối đa" },
+          { "name": "minArea", "in": "query", "schema": { "type": "number" }, "description": "Diện tích tối thiểu (m²)" },
+          { "name": "maxArea", "in": "query", "schema": { "type": "number" }, "description": "Diện tích tối đa (m²)" },
+          { "name": "district", "in": "query", "schema": { "type": "string" }, "description": "Quận/huyện (VD: Quan 1)" },
+          { "name": "ward", "in": "query", "schema": { "type": "string" }, "description": "Phường/xã" },
+          { "name": "verified", "in": "query", "schema": { "type": "boolean" }, "description": "Chỉ tin đã kiểm định" },
+          { "name": "vip", "in": "query", "schema": { "type": "boolean" }, "description": "Chỉ tin VIP" },
+          { "name": "furniture", "in": "query", "schema": { "type": "boolean" }, "description": "Có nội thất" },
+          { "name": "pets", "in": "query", "schema": { "type": "boolean" }, "description": "Cho phép nuôi pet" },
+          { "name": "vacantNow", "in": "query", "schema": { "type": "boolean", "default": true }, "description": "Còn trống ngay" },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["createdAt", "rent", "area", "views", "rating"] }, "description": "Trường sắp xếp" },
+          { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Danh sách tin đăng",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "listings": { "type": "array", "items": { "$ref": "#/components/schemas/Listing" } },
+                    "pagination": { "$ref": "#/components/schemas/Pagination" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/listings/featured": {
+      "get": {
+        "summary": "Tin đăng nổi bật",
+        "description": "Lấy 10 tin đăng verified và có lượt xem cao nhất",
+        "tags": ["Listings"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Danh sách tin nổi bật",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "listings": { "type": "array", "items": { "$ref": "#/components/schemas/Listing" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/listings/{id}": {
+      "get": {
+        "summary": "Chi tiết tin đăng",
+        "description": "Lấy thông tin chi tiết một tin đăng theo ID. Tự động tăng lượt xem.",
+        "tags": ["Listings"],
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Chi tiết tin đăng",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "listing": { "$ref": "#/components/schemas/Listing" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Không tìm thấy tin đăng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/seller/listings": {
+      "get": {
+        "summary": "Danh sách tin của tôi",
+        "description": "Lấy tất cả tin đăng của seller hiện tại",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["draft", "pending", "active", "rejected", "inactive"] } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách tin", "content": { "application/json": { "schema": { "type": "object", "properties": { "listings": { "type": "array", "items": { "$ref": "#/components/schemas/Listing" } } } } } } },
+          "401": { "description": "Chưa đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Cần quyền seller", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "post": {
+        "summary": "Tạo tin đăng mới",
+        "description": "Tạo tin đăng mới. Tin sẽ ở trạng thái pending và chờ manager duyệt.",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "roomType", "rent"],
+                "properties": {
+                  "title": { "type": "string", "example": "Phòng trọ mới Quận 1" },
+                  "roomType": { "type": "string", "enum": ["phong-tro", "chung-cu-mini", "nha-tro", "can-ho"] },
+                  "rent": { "type": "number", "example": 3500000 },
+                  "city": { "type": "string", "default": "TP Hồ Chí Minh" },
+                  "district": { "type": "string", "example": "Quận 1" },
+                  "ward": { "type": "string", "example": "Phường Bến Nghé" },
+                  "street": { "type": "string", "example": "Đường Lê Thánh Tôn" },
+                  "area": { "type": "number", "example": 25 },
+                  "furniture": { "type": "boolean", "default": false },
+                  "pets": { "type": "boolean", "default": false },
+                  "depositMonths": { "type": "number", "default": 1 },
+                  "electricity": { "type": "number", "example": 3500 },
+                  "water": { "type": "number", "example": 15000 },
+                  "internet": { "type": "number", "example": 100000 },
+                  "photos": { "type": "array", "items": { "type": "string" }, "description": "URL ảnh" },
+                  "amenities": { "type": "array", "items": { "type": "string" }, "example": ["wifi", "may-lanh", "tu-lanh"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Tạo thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "listing": { "$ref": "#/components/schemas/Listing" } } } } } },
+          "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Chưa đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Cần quyền seller", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/seller/listings/{id}": {
+      "put": {
+        "summary": "Cập nhật tin đăng",
+        "description": "Cập nhật tin đăng của mình. Nếu bị từ chối, sẽ chuyển lại sang pending.",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "rent": { "type": "number" },
+                  "area": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "listing": { "$ref": "#/components/schemas/Listing" } } } } } },
+          "403": { "description": "Không có quyền sửa tin này", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Không tìm thấy tin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Xóa tin đăng",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Xóa thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+          "403": { "description": "Không có quyền xóa tin này", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/seller/profile": {
+      "get": {
+        "summary": "Lấy hồ sơ seller",
+        "description": "Lấy thông tin hồ sơ seller profile của mình",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Hồ sơ seller", "content": { "application/json": { "schema": { "type": "object", "properties": { "profile": { "$ref": "#/components/schemas/SellerProfile" } } } } } },
+          "404": { "description": "Chưa có hồ sơ seller", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "put": {
+        "summary": "Cập nhật hồ sơ seller",
+        "description": "Cập nhật thông tin seller profile. Sau khi update, trạng thái sẽ reset về pending.",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idNumber": { "type": "string", "example": "079204001111" },
+                  "brand": { "type": "string", "example": "Minh Anh Realty" },
+                  "address": { "type": "string", "example": "24B Nguyễn Văn Hưởng, Thảo Điền, Thủ Đức" },
+                  "docs": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "profile": { "$ref": "#/components/schemas/SellerProfile" } } } } } }
+        }
+      }
+    },
+    "/api/seller/leads": {
+      "get": {
+        "summary": "Danh sách liên hệ",
+        "description": "Lấy danh sách lead/liên hệ gửi đến seller",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Danh sách leads", "content": { "application/json": { "schema": { "type": "object", "properties": { "leads": { "type": "array", "items": { "type": "object" } } } } } } }
+        }
+      }
+    },
+    "/api/seller/leads/{id}": {
+      "put": {
+        "summary": "Cập nhật trạng thái lead",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["new", "contacted", "interested", "not_interested"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" }
+        }
+      }
+    },
+    "/api/seller/appointments": {
+      "get": {
+        "summary": "Danh sách lịch hẹn",
+        "description": "Lấy danh sách lịch hẹn xem phòng của seller",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "completed"] } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách appointments", "content": { "application/json": { "schema": { "type": "object", "properties": { "appointments": { "type": "array" } } } } } }
+        }
+      }
+    },
+    "/api/seller/appointments/{id}": {
+      "put": {
+        "summary": "Cập nhật lịch hẹn",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "completed"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" }
+        }
+      }
+    },
+    "/api/seller/dashboard": {
+      "get": {
+        "summary": "Thống kê dashboard seller",
+        "description": "Lấy số liệu thống kê cho dashboard của seller",
+        "tags": ["Seller"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Thống kê",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "listings": {
+                          "type": "object",
+                          "properties": {
+                            "draft": { "type": "number" },
+                            "pending": { "type": "number" },
+                            "active": { "type": "number" },
+                            "rejected": { "type": "number" },
+                            "inactive": { "type": "number" }
+                          }
+                        },
+                        "newLeads": { "type": "number" },
+                        "pendingAppointments": { "type": "number" },
+                        "totalViews": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tenant/saved": {
+      "get": {
+        "summary": "Danh sách tin đã lưu",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Danh sách tin đã lưu", "content": { "application/json": { "schema": { "type": "object", "properties": { "listings": { "type": "array", "items": { "$ref": "#/components/schemas/Listing" } } } } } } }
+        }
+      }
+    },
+    "/api/tenant/saved/{listingId}": {
+      "post": {
+        "summary": "Lưu tin đăng",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "listingId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Đã lưu", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+          "409": { "description": "Đã lưu trước đó", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Bỏ lưu tin đăng",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "listingId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Đã bỏ lưu" }
+        }
+      }
+    },
+    "/api/tenant/appointments": {
+      "get": {
+        "summary": "Lịch hẹn của tôi",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "completed"] } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách lịch hẹn", "content": { "application/json": { "schema": { "type": "object", "properties": { "appointments": { "type": "array" } } } } } }
+        }
+      },
+      "post": {
+        "summary": "Đặt lịch hẹn xem phòng",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["listingId", "when"],
+                "properties": {
+                  "listingId": { "type": "string" },
+                  "when": { "type": "string", "format": "date-time", "example": "2026-10-20T10:00:00Z" },
+                  "phone": { "type": "string" },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Đặt lịch thành công" },
+          "400": { "description": "Tin đăng không còn hoạt động", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/tenant/appointments/{id}": {
+      "delete": {
+        "summary": "Hủy lịch hẹn",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Hủy thành công" },
+          "403": { "description": "Không có quyền hủy lịch này", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/tenant/leads": {
+      "post": {
+        "summary": "Gửi liên hệ cho seller",
+        "description": "Gửi thông tin liên hệ đến người đăng tin",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "phone"],
+                "properties": {
+                  "listingId": { "type": "string" },
+                  "name": { "type": "string" },
+                  "phone": { "type": "string" },
+                  "message": { "type": "string" },
+                  "when": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Gửi thành công" }
+        }
+      }
+    },
+    "/api/tenant/reviews": {
+      "post": {
+        "summary": "Đánh giá tin đăng",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["listingId", "score"],
+                "properties": {
+                  "listingId": { "type": "string" },
+                  "score": { "type": "number", "minimum": 1, "maximum": 5 },
+                  "photoMatch": { "type": "number", "minimum": 1, "maximum": 5 },
+                  "landlord": { "type": "number", "minimum": 1, "maximum": 5 },
+                  "security": { "type": "number", "minimum": 1, "maximum": 5 },
+                  "hygiene": { "type": "number", "minimum": 1, "maximum": 5 },
+                  "text": { "type": "string" },
+                  "verifiedStay": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Cảm ơn bạn đã đánh giá" },
+          "409": { "description": "Đã đánh giá trước đó", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/tenant/reports": {
+      "post": {
+        "summary": "Báo cáo tin đăng",
+        "description": "Gửi báo cáo vi phạm cho manager",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["severity", "title", "reason"],
+                "properties": {
+                  "listingId": { "type": "string" },
+                  "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+                  "title": { "type": "string" },
+                  "reason": { "type": "string" },
+                  "tone": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Đã gửi báo cáo" }
+        }
+      }
+    },
+    "/api/tenant/profile": {
+      "get": {
+        "summary": "Hồ sơ người thuê",
+        "tags": ["Tenant"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Thông tin hồ sơ", "content": { "application/json": { "schema": { "type": "object", "properties": { "user": { "$ref": "#/components/schemas/User" }, "stats": { "type": "object" } } } } } }
+        }
+      }
+    },
+    "/api/manager/approvals": {
+      "get": {
+        "summary": "Danh sách tin chờ duyệt",
+        "description": "Lấy danh sách tin đăng cần duyệt (chỉ manager/admin)",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "default": "pending" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách tin", "content": { "application/json": { "schema": { "type": "object", "properties": { "listings": { "type": "array" }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } },
+          "403": { "description": "Cần quyền manager", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/manager/approvals/{id}/approve": {
+      "put": {
+        "summary": "Duyệt tin đăng",
+        "description": "Phê duyệt tin đăng và gán badges",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "verified": { "type": "boolean", "default": false },
+                  "vip": { "type": "boolean", "default": false },
+                  "highTrust": { "type": "boolean", "default": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Duyệt thành công" },
+          "400": { "description": "Tin không ở trạng thái chờ duyệt", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/manager/approvals/{id}/reject": {
+      "put": {
+        "summary": "Từ chối tin đăng",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Từ chối thành công" }
+        }
+      }
+    },
+    "/api/manager/seller-requests": {
+      "get": {
+        "summary": "Yêu cầu nâng cấp seller",
+        "description": "Lấy danh sách yêu cầu nâng cấp lên seller",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "default": "pending" } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách requests", "content": { "application/json": { "schema": { "type": "object", "properties": { "requests": { "type": "array" } } } } } }
+        }
+      }
+    },
+    "/api/manager/seller-requests/{id}/approve": {
+      "put": {
+        "summary": "Duyệt yêu cầu seller",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Duyệt thành công" }
+        }
+      }
+    },
+    "/api/manager/seller-requests/{id}/reject": {
+      "put": {
+        "summary": "Từ chối yêu cầu seller",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Từ chối thành công" }
+        }
+      }
+    },
+    "/api/manager/reports": {
+      "get": {
+        "summary": "Danh sách báo cáo",
+        "description": "Lấy danh sách báo cáo vi phạm từ tenant",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "default": "pending" } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách reports", "content": { "application/json": { "schema": { "type": "object", "properties": { "reports": { "type": "array" } } } } } }
+        }
+      }
+    },
+    "/api/manager/reports/{id}/resolve": {
+      "put": {
+        "summary": "Xử lý báo cáo",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resolution": { "type": "string" },
+                  "action": { "type": "string", "enum": ["resolve", "dismiss"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Xử lý thành công" }
+        }
+      }
+    },
+    "/api/manager/stats": {
+      "get": {
+        "summary": "Thống kê manager",
+        "description": "Lấy số liệu thống kê cho manager",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Thống kê",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pending": { "type": "number" },
+                    "approvedToday": { "type": "number" },
+                    "rejectedToday": { "type": "number" },
+                    "totalUsers": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/manager/audit": {
+      "get": {
+        "summary": "Nhật ký hệ thống",
+        "description": "Lấy audit log",
+        "tags": ["Manager"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Audit logs", "content": { "application/json": { "schema": { "type": "object", "properties": { "logs": { "type": "array" }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } }
+        }
+      }
+    },
+    "/api/admin/dashboard": {
+      "get": {
+        "summary": "Dashboard admin",
+        "description": "Lấy thống kê tổng quan cho admin",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Thống kê dashboard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stats": {
+                      "type": "object",
+                      "properties": {
+                        "totalUsers": { "type": "number" },
+                        "totalListings": { "type": "number" },
+                        "activeListings": { "type": "number" },
+                        "pendingListings": { "type": "number" },
+                        "totalSellers": { "type": "number" },
+                        "newUsersThisWeek": { "type": "number" },
+                        "newListingsThisWeek": { "type": "number" },
+                        "listingsByStatus": { "type": "object" },
+                        "usersByRole": { "type": "object" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "summary": "Quản lý người dùng",
+        "description": "Danh sách người dùng có phân trang và lọc",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "role", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách users", "content": { "application/json": { "schema": { "type": "object", "properties": { "users": { "type": "array" }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } }
+        }
+      }
+    },
+    "/api/admin/users/{id}/role": {
+      "put": {
+        "summary": "Thay đổi vai trò user",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["role"],
+                "properties": {
+                  "role": { "type": "string", "enum": ["tenant", "seller", "manager", "admin"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" },
+          "400": { "description": "Không thể tự thay đổi vai trò của mình", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "delete": {
+        "summary": "Xóa người dùng",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Xóa thành công" },
+          "400": { "description": "Không thể tự xóa tài khoản của mình", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/listings": {
+      "get": {
+        "summary": "Tất cả tin đăng",
+        "description": "Danh sách tất cả tin đăng (admin)",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách listings", "content": { "application/json": { "schema": { "type": "object", "properties": { "listings": { "type": "array" }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } }
+        }
+      }
+    },
+    "/api/admin/listings/{id}": {
+      "delete": {
+        "summary": "Xóa tin đăng",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Xóa thành công" }
+        }
+      }
+    },
+    "/api/admin/transactions": {
+      "get": {
+        "summary": "Lịch sử giao dịch",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "type", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Danh sách transactions" }
+        }
+      }
+    },
+    "/api/admin/config": {
+      "get": {
+        "summary": "Lấy cấu hình hệ thống",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Cấu hình hệ thống" }
+        }
+      },
+      "put": {
+        "summary": "Cập nhật cấu hình",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["key", "value"],
+                "properties": {
+                  "key": { "type": "string" },
+                  "value": { "type": "object" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" }
+        }
+      }
+    },
+    "/api/admin/audit": {
+      "get": {
+        "summary": "Audit log đầy đủ",
+        "description": "Audit log với bộ lọc đầy đủ",
+        "tags": ["Admin"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "actorId", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "targetType", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Audit logs" }
+        }
+      }
+    },
+    "/api/payment/create": {
+      "post": {
+        "summary": "Tạo thanh toán VNPay",
+        "description": "Tạo URL thanh toán VNPay. Chỉ tạo link, chưa trừ tiền.",
+        "tags": ["Payment"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amount", "packageId"],
+                "properties": {
+                  "amount": { "type": "number", "description": "Số tiền (VND)" },
+                  "packageId": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "URL thanh toán",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "paymentUrl": { "type": "string" },
+                    "transactionId": { "type": "string" },
+                    "amount": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment/status/{txnRef}": {
+      "get": {
+        "summary": "Kiểm tra trạng thái giao dịch",
+        "tags": ["Payment"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "txnRef", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Trạng thái giao dịch" },
+          "404": { "description": "Không tìm thấy giao dịch", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/payment/history": {
+      "get": {
+        "summary": "Lịch sử giao dịch của tôi",
+        "tags": ["Payment"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Lịch sử giao dịch" }
+        }
+      }
+    },
+    "/api/payment/wallet": {
+      "get": {
+        "summary": "Số dư ví",
+        "tags": ["Payment"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Thông tin ví" }
+        }
+      }
+    },
+    "/api/payment/packages": {
+      "get": {
+        "summary": "Danh sách gói dịch vụ",
+        "description": "Lấy danh sách các gói VIP, Verified...",
+        "tags": ["Payment"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Danh sách packages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "packages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "price": { "type": "number" },
+                          "days": { "type": "number" },
+                          "features": { "type": "array", "items": { "type": "string" } },
+                          "popular": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

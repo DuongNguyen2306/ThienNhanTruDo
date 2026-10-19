@@ -4,13 +4,22 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Bell, CalendarCheck, ChevronRight, FileText, Heart, History, KeyRound, Lock, ShieldCheck, Star, TrendingUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { PublicFooter, PublicHeader, RoleGate } from '@/components/shells'
+import { BrutalHeader } from '@/components/brutal-header'
+import { PublicFooter, RoleGate } from '@/components/shells'
 import { cn } from '@/lib/utils'
 
-const items = [
+export type SidebarItem = {
+  href: string
+  label: string
+  icon: React.ElementType
+  hint?: string | number
+  badge?: string
+}
+
+const defaultItems: SidebarItem[] = [
   { href: '/tai-khoan', label: 'Hồ sơ cá nhân', icon: ShieldCheck },
-  { href: '/tai-khoan/lich-hen', label: 'Lịch hẹn xem phòng', icon: CalendarCheck, hint: '2' },
-  { href: '/tai-khoan/da-luu', label: 'Tin đã lưu', icon: Heart, hint: '5' },
+  { href: '/tai-khoan/lich-hen', label: 'Lịch hẹn xem phòng', icon: CalendarCheck },
+  { href: '/tai-khoan/da-luu', label: 'Tin đã lưu', icon: Heart, hint: 5 },
   { href: '/tai-khoan/danh-gia', label: 'Lịch sử đánh giá', icon: Star },
   { href: '/tai-khoan/hop-dong', label: 'Hợp đồng thuê', icon: FileText },
   { href: '/tai-khoan/coc-giu-cho', label: 'Đặt cọc giữ chỗ', icon: CalendarCheck },
@@ -19,15 +28,35 @@ const items = [
   { href: '/tai-khoan/nang-cap', label: 'Nâng cấp Seller', icon: TrendingUp, badge: 'hot' },
 ]
 
-export function AccountShell({ children, title, desc }: { children: React.ReactNode; title: string; desc: string }) {
+export function AccountShell({ 
+  children, 
+  title, 
+  desc, 
+  customItems,
+  lichHenCount 
+}: { 
+  children: React.ReactNode
+  title: string
+  desc: string
+  customItems?: SidebarItem[]
+  lichHenCount?: number
+}) {
   const pathname = usePathname()
+  
+  // Build items with dynamic hints
+  const items = (customItems ?? defaultItems).map(item => {
+    if (item.href === '/tai-khoan/lich-hen' && lichHenCount !== undefined) {
+      return { ...item, hint: lichHenCount }
+    }
+    return item
+  })
 
   return (
-    <RoleGate allow="tenant">
+    <RoleGate allow={['tenant', 'seller', 'manager', 'admin']}>
     <main className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
-      <PublicHeader />
+      <BrutalHeader />
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-10">
-        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
 
           {/* Sidebar */}
           <aside className="sticky top-[68px] hidden h-[calc(100vh-68px-2rem)] flex-col gap-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 lg:flex">
@@ -39,13 +68,13 @@ export function AccountShell({ children, title, desc }: { children: React.ReactN
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'group flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm transition',
+                    'group flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm transition',
                     active ? 'bg-slate-900 font-semibold text-white' : 'text-slate-600 hover:bg-slate-50',
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex min-w-0 items-center gap-2">
                     {Icon ? <Icon className={cn('size-4 shrink-0', active ? 'text-white' : 'text-slate-400')} /> : null}
-                    <span className="truncate">{item.label}</span>
+                    <span className="truncate text-[13px]">{item.label}</span>
                   </span>
                   <span className="flex items-center gap-2">
                     {item.badge && (

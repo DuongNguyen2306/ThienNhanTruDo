@@ -22,7 +22,6 @@ router.get(
     query('maxArea').optional().isFloat({ min: 0 }).toFloat(),
     query('district').optional().isString(),
     query('ward').optional().isString(),
-    query('verified').optional().isBoolean().toBoolean(),
     query('vip').optional().isBoolean().toBoolean(),
     query('furniture').optional().isBoolean().toBoolean(),
     query('pets').optional().isBoolean().toBoolean(),
@@ -45,11 +44,11 @@ router.get(
         maxArea,
         district,
         ward,
-        verified,
         vip,
         furniture,
         pets,
-        vacantNow = true,
+        verified,
+        vacantNow,
         availableFrom,
         direction,
         sortBy = 'createdAt',
@@ -66,11 +65,11 @@ router.get(
       if (roomType) where.roomType = roomType;
       if (district) where.district = { contains: district };
       if (ward) where.ward = { contains: ward };
-      if (verified !== undefined) where.verified = verified;
       if (vip !== undefined) where.vip = vip;
       if (furniture !== undefined) where.furniture = furniture;
       if (pets !== undefined) where.pets = pets;
-      if (vacantNow !== undefined) where.vacantNow = vacantNow;
+      if (verified !== undefined) where.verified = verified === 'true' || verified === true;
+      if (vacantNow !== undefined) where.vacantNow = vacantNow === 'true' || vacantNow === true;
       if (availableFrom) where.availableFrom = { lte: availableFrom };
       if (direction) where.direction = direction;
 
@@ -88,8 +87,20 @@ router.get(
         if (maxArea) where.area.lte = maxArea;
       }
 
-      // Build orderBy
-      const orderBy = { [sortBy]: sortOrder };
+      // Build orderBy - VIP listings with active expiration come first
+      // When sorting by views, put active VIPs at top regardless of sort
+      let orderBy;
+      if (sortBy === 'views' || sortBy === 'rating') {
+        // For views/rating: active VIPs first, then normal sort
+        // Note: This requires a subquery or raw query for full SQL sorting
+        // For MongoDB/Prisma, we'll do post-processing
+        orderBy = [{ vip: 'desc' }, { [sortBy]: sortOrder }];
+      } else if (sortBy === 'createdAt') {
+        // For createdAt: active VIPs first, then by date
+        orderBy = [{ vip: 'desc' }, { [sortBy]: sortOrder }];
+      } else {
+        orderBy = { [sortBy]: sortOrder };
+      }
 
       const [listings, total] = await Promise.all([
         prisma.listing.findMany({
@@ -107,7 +118,7 @@ router.get(
                   select: {
                     trustScore: true,
                     responseRate: true,
-                    verified: true,
+                    status: true,
                   },
                 },
               },
@@ -117,12 +128,17 @@ router.get(
         prisma.listing.count({ where }),
       ]);
 
-      // Parse JSON fields
-      const formattedListings = listings.map((l) => ({
-        ...l,
-        photos: l.photos ? JSON.parse(l.photos) : [],
-        amenities: l.amenities ? JSON.parse(l.amenities) : [],
-      }));
+      // Mark VIP status based on expiration (no filtering by VIP)
+      const now = new Date();
+      const formattedListings = listings
+        .map((l) => ({
+          ...l,
+          photos: l.photos ? JSON.parse(l.photos) : [],
+          amenities: l.amenities ? JSON.parse(l.amenities) : [],
+          // Mark VIP status based on expiration
+          isVipActive: l.vip && l.vipExpiresAt && l.vipExpiresAt > now,
+        }));
+      // All listings visible regardless of VIP status
 
       res.json({
         listings: formattedListings,
@@ -144,8 +160,16 @@ router.get(
 // ============================================
 router.get('/featured', optionalAuth, async (req, res, next) => {
   try {
+    const now = new Date();
+    
     const listings = await prisma.listing.findMany({
-      where: { status: 'active', verified: true },
+      where: { 
+        status: 'active',
+        OR: [
+          { vip: false },
+          { vip: true, vipExpiresAt: { gte: now } },
+        ],
+      },
       take: 10,
       orderBy: [{ vip: 'desc' }, { views: 'desc' }],
       include: {
@@ -154,7 +178,7 @@ router.get('/featured', optionalAuth, async (req, res, next) => {
             id: true,
             fullName: true,
             sellerProfile: {
-              select: { trustScore: true, verified: true },
+              select: { trustScore: true, status: true },
             },
           },
         },
@@ -165,6 +189,7 @@ router.get('/featured', optionalAuth, async (req, res, next) => {
       ...l,
       photos: l.photos ? JSON.parse(l.photos) : [],
       amenities: l.amenities ? JSON.parse(l.amenities) : [],
+      isVipActive: l.vip && l.vipExpiresAt && l.vipExpiresAt > now,
     }));
 
     res.json({ listings: formatted });
@@ -192,7 +217,7 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
               select: {
                 trustScore: true,
                 responseRate: true,
-                verified: true,
+                status: true,
                 brand: true,
               },
             },

@@ -1,5 +1,7 @@
-import { BillingPage } from '@/components/seller-portal'
+export const dynamic = 'force-dynamic'
 
-export default function SellerBillingPage() {
-  return <BillingPage />
+import ClientPage from './ClientPage'
+
+export default function Page() {
+  return <ClientPage />
 }

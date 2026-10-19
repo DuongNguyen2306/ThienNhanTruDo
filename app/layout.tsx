@@ -3,8 +3,10 @@ import type { Metadata, Viewport } from 'next'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
-  title: 'THIÊN DỮ TRÚ ĐỒ — Phòng trọ đã kiểm định',
+  title: 'THIÊN NHÃN TRÚ ĐỒ — Phòng trọ đã kiểm định',
   description:
     'Nền tảng thuê phòng minh bạch tại Việt Nam: địa chỉ chính xác, biểu phí rõ ràng, ảnh đã kiểm định thực tế.',
   icons: {
@@ -15,11 +17,6 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
-  links: [
-    { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-    { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
-    { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap' },
-  ],
 }
 
 export const viewport: Viewport = {
@@ -40,8 +37,8 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           {children}
-          {process.env.NODE_ENV === 'production' && <Analytics />}
         </Providers>
+        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )

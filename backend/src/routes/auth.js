@@ -6,6 +6,7 @@ const prisma = require('../db');
 const config = require('../config');
 const { validate } = require('../middleware/errorHandler');
 const { authenticate, ROLES } = require('../middleware/auth');
+const { authRateLimiter, registerRateLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ const generateToken = (user) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      fullName: user.fullName,
     },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn }
@@ -47,6 +49,7 @@ const getRoleTitle = (role) => {
 // ============================================
 router.post(
   '/register',
+  registerRateLimiter,
   [
     body('phone').isMobilePhone('vi-VN').withMessage('Số điện thoại không hợp lệ'),
     body('password').isLength({ min: 6 }).withMessage('Mật khẩu phải có ít nhất 6 ký tự'),
@@ -120,6 +123,7 @@ router.post(
 // ============================================
 router.post(
   '/login',
+  authRateLimiter,
   [
     body('phone').isMobilePhone('vi-VN').withMessage('Số điện thoại không hợp lệ'),
     body('password').notEmpty().withMessage('Mật khẩu không được trống'),
@@ -173,92 +177,6 @@ router.post(
 );
 
 // ============================================
-// POST /api/auth/otp/send
-// ============================================
-router.post(
-  '/otp/send',
-  [body('phone').isMobilePhone('vi-VN').withMessage('Số điện thoại không hợp lệ')],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { phone } = req.body;
-
-      const user = await prisma.user.findUnique({ where: { phone } });
-
-      if (!user) {
-        return res.status(404).json({ error: 'Tài khoản không tồn tại' });
-      }
-
-      // In production, send SMS here
-      // For demo, always return success
-      res.json({
-        message: 'Mã OTP đã được gửi',
-        demo: true,
-        note: 'Trong môi trường demo, mã OTP là: ' + config.demoOtp,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// ============================================
-// POST /api/auth/otp/verify
-// ============================================
-router.post(
-  '/otp/verify',
-  [
-    body('phone').isMobilePhone('vi-VN').withMessage('Số điện thoại không hợp lệ'),
-    body('otp').notEmpty().withMessage('Mã OTP không được trống'),
-  ],
-  validate,
-  async (req, res, next) => {
-    try {
-      const { phone, otp } = req.body;
-
-      // Demo mode: accept 123456
-      if (otp !== config.demoOtp) {
-        return res.status(401).json({ error: 'Mã OTP không đúng' });
-      }
-
-      const user = await prisma.user.findUnique({ where: { phone } });
-
-      if (!user) {
-        return res.status(404).json({ error: 'Tài khoản không tồn tại' });
-      }
-
-      const token = generateToken(user);
-
-      // Log audit
-      await prisma.auditLog.create({
-        data: {
-          actorId: user.id,
-          action: 'login',
-          target: user.id,
-          targetType: 'user',
-        },
-      });
-
-      res.json({
-        message: 'Xác thực OTP thành công',
-        user: {
-          id: user.id,
-          phone: user.phone,
-          email: user.email,
-          fullName: user.fullName,
-          role: user.role,
-          initials: user.initials,
-          title: user.title,
-        },
-        token,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// ============================================
 // GET /api/auth/me
 // ============================================
 router.get('/me', authenticate, async (req, res, next) => {
@@ -283,6 +201,7 @@ router.get('/me', authenticate, async (req, res, next) => {
         role: user.role,
         initials: user.initials,
         title: user.title,
+        sellerStatus: user.sellerProfile?.status || 'none',
         sellerProfile: user.sellerProfile,
       },
     });
@@ -399,6 +318,131 @@ router.post('/logout', authenticate, async (req, res, next) => {
     });
 
     res.json({ message: 'Đăng xuất thành công' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// POST /api/auth/apply-seller
+// Apply to become a seller (for authenticated TENANT)
+// ============================================
+router.post(
+  '/apply-seller',
+  authenticate,
+  [
+    body('idNumber').notEmpty().withMessage('CCCD không được trống'),
+    body('idNumber').isLength({ min: 12, max: 12 }).withMessage('CCCD phải đủ 12 số'),
+    body('idNumber').isNumeric().withMessage('CCCD chỉ được chứa số'),
+    body('permanentAddress').notEmpty().withMessage('Địa chỉ thường trú không được trống'),
+    body('permanentAddress').isLength({ min: 10 }).withMessage('Địa chỉ thường trú phải có ít nhất 10 ký tự'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { idNumber, permanentAddress } = req.body;
+      const userId = req.user.id;
+
+      // Only tenants can apply
+      if (req.user.role !== 'tenant') {
+        return res.status(403).json({ error: 'Chỉ người thuê mới có thể đăng ký làm chủ trọ' });
+      }
+
+      // Get user with seller profile
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { sellerProfile: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Người dùng không tồn tại' });
+      }
+
+      // Check if already a seller or has pending application
+      if (user.sellerProfile) {
+        if (user.sellerProfile.status === 'pending') {
+          return res.status(409).json({ error: 'Hồ sơ đang chờ xét duyệt. Vui lòng chờ Manager duyệt.' });
+        }
+        if (user.sellerProfile.status === 'active') {
+          return res.status(409).json({ error: 'Bạn đã là chủ trọ rồi' });
+        }
+        if (user.sellerProfile.status === 'rejected') {
+          // Allow resubmission - update the rejected profile
+          await prisma.sellerProfile.update({
+            where: { userId },
+            data: {
+              idNumber,
+              address: permanentAddress,
+              status: 'pending',
+              rejectionReason: null,
+              reviewedAt: null,
+              reviewedBy: null,
+            },
+          });
+
+          return res.json({
+            message: 'Hồ sơ đã được gửi lại để xét duyệt',
+            status: 'pending',
+          });
+        }
+      }
+
+      // Create new seller profile
+      const sellerProfile = await prisma.sellerProfile.create({
+        data: {
+          userId,
+          idNumber,
+          address: permanentAddress,
+          status: 'pending',
+        },
+      });
+
+      res.status(201).json({
+        message: 'Đăng ký thành công. Hồ sơ đang chờ Manager duyệt.',
+        status: 'pending',
+        sellerProfile,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/auth/seller-application
+// Get seller application status
+// ============================================
+router.get('/seller-application', authenticate, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { sellerProfile: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Người dùng không tồn tại' });
+    }
+
+    if (!user.sellerProfile) {
+      return res.json({
+        hasApplied: false,
+        status: null,
+        canApply: req.user.role === 'tenant',
+      });
+    }
+
+    res.json({
+      hasApplied: true,
+      status: user.sellerProfile.status,
+      sellerProfile: {
+        id: user.sellerProfile.id,
+        status: user.sellerProfile.status,
+        rejectionReason: user.sellerProfile.rejectionReason,
+        reviewedAt: user.sellerProfile.reviewedAt,
+        createdAt: user.sellerProfile.createdAt,
+      },
+      canApply: false,
+    });
   } catch (error) {
     next(error);
   }

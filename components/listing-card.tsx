@@ -21,7 +21,7 @@ export function ListingCard({ listing, compact = false }: { listing: Listing; co
                 <Check className="size-3" /> Đã xác thực thực tế
               </Badge>
             )}
-            {listing.vip && <Badge className="rounded-full bg-amber-500 text-white">VIP</Badge>}
+            {listing.vip && <Badge className="rounded-full bg-gradient-to-r from-emerald-500 to-green-400 text-white font-bold border-emerald-600">⭐ VIP</Badge>}
           </div>
           <Button variant="secondary" size="icon" className="absolute right-3 top-3 rounded-full bg-white/90" aria-label="Lưu tin">
             <Heart className="size-4" />

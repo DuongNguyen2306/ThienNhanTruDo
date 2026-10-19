@@ -2,17 +2,19 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft, BadgeCheck, Calendar, Car, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, CookingPot, DoorOpen, ElectricBolt, Eye, Home, MapPin, MessageCircle,
-  Phone, Share2, ShieldCheck, Star, WaterDrop, WifiHigh, X, Flag, ExternalLink,
+  Clock, CookingPot, DoorOpen, Eye, Heart, Home, MapPin, MessageCircle,
+  Phone, Share2, ShieldCheck, Star, WifiHigh, X, Flag, ExternalLink, Zap, Droplet,
 } from 'lucide-react'
 import { BrutalHeader } from '@/components/brutal-header'
 import { BrutalFooter } from '@/components/brutal-footer'
-import { formatVnd, getListing, getSeller, reviews, totalMonthly, type Listing } from '@/lib/data'
+import { formatVnd } from '@/lib/data'
+import { listingApi, tenantApi } from '@/lib/api'
+import { useAuth } from '@/components/auth-provider'
 
 // Dynamic import RealMap (Leaflet requires client-side only)
 const RealMap = dynamic(() => import('@/components/RealMap').then((m) => m.RealMap), {
@@ -23,6 +25,18 @@ const RealMap = dynamic(() => import('@/components/RealMap').then((m) => m.RealM
     </div>
   ),
 })
+
+// Room type labels
+const ROOM_TYPE_LABELS: Record<string, string> = {
+  'phong-tro': 'Phòng trọ',
+  'chung-cu-mini': 'Chung cư mini',
+  'nha-tro': 'Nhà trọ',
+  'can-ho': 'Căn hộ',
+}
+
+function getRoomTypeLabel(value: string): string {
+  return ROOM_TYPE_LABELS[value] || value || 'Phòng trọ'
+}
 
 // Amenity icons mapping
 const AMENITY_ICONS: Record<string, React.ReactNode> = {
@@ -40,9 +54,35 @@ const AMENITY_ICONS: Record<string, React.ReactNode> = {
 
 export default function ListingDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const id = params.id as string
-  const listing = getListing(id)
-  const seller = listing ? getSeller(listing.sellerId) : undefined
+  const { user } = useAuth()
+
+  // ── API data state ──────────────────────────────────────────────
+  const [listing, setListing] = useState<any>(null)
+  const [seller, setSeller] = useState<any>(null)
+  const [reviews, setReviews] = useState<any[]>([])
+  const [reviewStats, setReviewStats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // ── Review state ──────────────────────────────────────────────
+  const [canReview, setCanReview] = useState(false)
+  const [reviewEligibility, setReviewEligibility] = useState<any>(null)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewForm, setReviewForm] = useState({
+    score: 5,
+    text: '',
+    photoMatch: 5,
+    landlord: 5,
+    security: 5,
+    hygiene: 5,
+  })
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewSuccess, setReviewSuccess] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+
+  // ── UI state ──────────────────────────────────────────────────
   const [currentPhoto, setCurrentPhoto] = useState(0)
   const [showBookingModal, setShowBookingModal] = useState(false)
   const [people, setPeople] = useState(1)
@@ -56,18 +96,114 @@ export default function ListingDetailPage() {
   const [bookingSuccess, setBookingSuccess] = useState(false)
   const [bookingError, setBookingError] = useState('')
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  // Calculate min date client-side only to avoid hydration mismatch
+  const [minDate, setMinDate] = useState('')
+
+  // ── Save/unsave state ──────────────────────────────────────────
+  const [savedListings, setSavedListings] = useState<number[]>([])
+  const [savingId, setSavingId] = useState<number | null>(null)
+
+  // Set min date after mount (client-side only)
+  useEffect(() => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    setMinDate(tomorrow.toISOString().split('T')[0])
+  }, [])
+
+  // Fetch listing data from API
+  useEffect(() => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+    // Fetch listing detail
+    listingApi.getById(id)
+      .then((data) => {
+        const listingData = (data as any).listing || data
+        if (!listingData || !listingData.id) {
+          setError('Không tìm thấy phòng trọ này.')
+          setLoading(false)
+          return
+        }
+        setListing(listingData)
+        // Use seller info from listing response
+        if (listingData.seller) {
+          setSeller({
+            id: listingData.seller.id,
+            name: listingData.seller.fullName || listingData.seller.name || 'Chủ trọ',
+            phone: listingData.seller.phone,
+            trustScore: listingData.seller.sellerProfile?.trustScore,
+            responseRate: listingData.seller.sellerProfile?.responseRate,
+            brand: listingData.seller.sellerProfile?.brand,
+          })
+        }
+      })
+      .catch(err => {
+        console.error('[ListingDetail] Fetch error:', err)
+        setError('Không thể tải thông tin phòng. Vui lòng thử lại.')
+      })
+      .finally(() => setLoading(false))
+  }, [id])
+
+  // Fetch reviews from listing-specific endpoint
+  useEffect(() => {
+    if (!id || loading) return
+    tenantApi.getListingReviews(id)
+      .then((res: any) => {
+        setReviews(res.reviews || [])
+        setReviewStats(res.stats || null)
+      })
+      .catch(() => setReviews([]))
+  }, [id, loading])
+
+  // Check review eligibility when user is logged in
+  useEffect(() => {
+    if (!user || !id) return
+    tenantApi.getReviewEligibility(id)
+      .then((res: any) => {
+        setReviewEligibility(res)
+        setCanReview(res.eligible)
+      })
+      .catch(() => setCanReview(false))
+  }, [user, id])
+
+  // Fetch saved listings when user is logged in
+  useEffect(() => {
+    if (!user) return
+    tenantApi.getSaved()
+      .then((res: any) => {
+        const ids = (res.listings || []).map((l: any) => l.id)
+        setSavedListings(ids)
+      })
+      .catch(() => {})
+  }, [user])
+
+  // Toggle save/unsave listing
+  const handleToggleSave = async () => {
+    if (!user) {
+      alert('Vui lòng đăng nhập để lưu tin!')
+      return
+    }
+    if (!listing?.id) return
+    setSavingId(listing.id)
+    try {
+      if (savedListings.includes(listing.id)) {
+        await tenantApi.unsaveListing(String(listing.id))
+        setSavedListings(prev => prev.filter(id => id !== listing.id))
+      } else {
+        await tenantApi.saveListing(String(listing.id))
+        setSavedListings(prev => [...prev, listing.id])
+      }
+    } catch (err) {
+      console.error('Save error:', err)
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   // Validate phone number (Vietnamese format)
   const isValidPhone = (phone: string) => {
     const cleaned = phone.replace(/\s/g, '')
     return /^(0[0-9]{9,10})$/.test(cleaned)
-  }
-
-  // Get minimum date (tomorrow)
-  const getMinDate = () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toISOString().split('T')[0]
   }
 
   // Validate booking form
@@ -102,18 +238,25 @@ export default function ListingDetailPage() {
   // Handle booking submission
   const handleBookingSubmit = async () => {
     if (!validateBookingForm()) return
-    
+
     setBookingLoading(true)
     setBookingError('')
-    
-    // Simulate API call
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      // Combine date and time into ISO8601 format
+      const when = new Date(`${bookingDate}T${bookingTime}:00`).toISOString()
+
+      await tenantApi.createAppointment({
+        listingId: listing.id,
+        when,
+        phone: bookingPhone,
+        note: bookingNote,
+      })
+
       // Success
       setBookingSuccess(true)
       setBookingLoading(false)
-      
+
       // Reset form after delay
       setTimeout(() => {
         setShowBookingModal(false)
@@ -122,11 +265,12 @@ export default function ListingDetailPage() {
         setBookingPhone('')
         setBookingNote('')
         setBookingSuccess(false)
-        setFormErrors({})
       }, 2000)
-    } catch {
-      setBookingError('Đã xảy ra lỗi. Vui lòng thử lại.')
+    } catch (err: unknown) {
+      console.error('[Booking] Error:', err)
       setBookingLoading(false)
+      const error = err as { message?: string }
+      setBookingError(error?.message || 'Đặt lịch thất bại. Vui lòng thử lại.')
     }
   }
 
@@ -159,9 +303,17 @@ export default function ListingDetailPage() {
     )
   }
 
-  const listingReviews = reviews.filter((r) => r.listingId === listing.id)
-  const monthlyTotal = totalMonthly(listing, people)
-  const photos = listing.photos.length > 0 ? listing.photos : [{ src: listing.image, label: 'Tổng quan', source: 'host' as const }]
+  const monthlyTotal = (listing.rent ?? 0)
+    + (listing.electricity ?? 0) * 50
+    + (listing.water ?? 0)
+    + (listing.managementFee ?? 0)
+    + (listing.internet ?? 0)
+    + (listing.sanitation ?? 0)
+
+  // Build photos array from API response
+  const photos: any[] = (listing.photos ?? []).length > 0
+    ? (listing.photos as any[]).map((p: any) => typeof p === 'string' ? { src: p } : p)
+    : listing.image ? [{ src: listing.image, label: 'Tổng quan', source: 'host' }] : []
 
   return (
     <main className="min-h-screen bg-[#F5F5F0]">
@@ -202,8 +354,14 @@ export default function ListingDetailPage() {
                   </span>
                 )}
                 {listing.vip && (
-                  <span className="rounded-lg bg-[#151515] px-3 py-1 text-xs font-bold text-white border-[1.5px] border-[#151515]">
-                    VIP
+                  <span 
+                    className="rounded-lg px-3 py-1 text-xs font-black text-white border-[2px] border-[#151515]"
+                    style={{
+                      background: 'linear-gradient(to right, #10b981, #22c55e)',
+                      boxShadow: '0 0 10px 2px rgba(34, 197, 94, 0.5), 2px 2px 0 #151515',
+                    }}
+                  >
+                    ⭐ VIP
                   </span>
                 )}
               </div>
@@ -217,10 +375,18 @@ export default function ListingDetailPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="flex size-10 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-white text-sm font-medium text-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0_#151515]"
-                aria-label="Lưu tin"
+                onClick={handleToggleSave}
+                disabled={savingId === listing?.id}
+                className={`flex size-10 items-center justify-center rounded-xl border-[2px] border-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0_#151515] ${
+                  listing && savedListings.includes(listing.id)
+                    ? 'bg-red-500 text-white'
+                    : 'bg-white text-[#151515]'
+                }`}
+                aria-label={listing && savedListings.includes(listing.id) ? 'Bỏ lưu tin' : 'Lưu tin'}
               >
-                ❤️
+                <Heart
+                  className={`size-5 ${listing && savedListings.includes(listing.id) ? 'fill-white' : ''}`}
+                />
               </button>
               <button
                 type="button"
@@ -244,7 +410,7 @@ export default function ListingDetailPage() {
               <div className="relative overflow-hidden rounded-2xl border-[3px] border-[#151515] bg-white shadow-[6px_6px_0_#151515]">
                 <Image
                   src={photos[currentPhoto].src}
-                  alt={photos[currentPhoto].label}
+                  alt={photos[currentPhoto].label || `Ảnh ${currentPhoto + 1} - ${listing.title}`}
                   width={1200}
                   height={600}
                   className="aspect-[16/9] w-full object-cover"
@@ -294,7 +460,7 @@ export default function ListingDetailPage() {
                     >
                       <Image
                         src={photo.src}
-                        alt={photo.label}
+                        alt={photo.label || `Ảnh phòng ${i + 1}`}
                         width={120}
                         height={80}
                         className="aspect-[4/3] w-20 object-cover"
@@ -317,10 +483,10 @@ export default function ListingDetailPage() {
               <div className="mt-3 flex flex-wrap gap-3">
                 <span className="flex items-center gap-1.5 rounded-lg bg-[#F5F5F0] px-3 py-1.5 text-xs font-semibold text-[#151515] border-[1.5px] border-[#151515]">
                   <Home className="size-3.5" />
-                  {listing.roomType}
+                  {getRoomTypeLabel(listing.roomType)}
                 </span>
                 <span className="flex items-center gap-1.5 rounded-lg bg-[#F5F5F0] px-3 py-1.5 text-xs font-semibold text-[#151515] border-[1.5px] border-[#151515]">
-                  📐 {listing.area} m²
+                  📐 {listing.area || 0} m²
                 </span>
                 <span className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border-[1.5px] border-[#151515] ${
                   listing.vacantNow
@@ -372,7 +538,7 @@ export default function ListingDetailPage() {
                 ✨ Tiện ích
               </h2>
               <div className="flex flex-wrap gap-2">
-                {listing.amenities.map((amenity, i) => (
+                {((listing.amenities as string[]) ?? []).map((amenity: string, i: number) => (
                   <span
                     key={i}
                     className="flex items-center gap-1.5 rounded-xl border-[2px] border-[#151515] bg-white px-4 py-2 text-sm font-medium text-[#151515] shadow-[2px_2px_0_#151515]"
@@ -392,7 +558,7 @@ export default function ListingDetailPage() {
                 {[
                   ['Tiền thuê hàng tháng', formatVnd(listing.rent)],
                   ['Tiền cọc', `${listing.depositMonths} tháng · ${formatVnd(listing.rent * listing.depositMonths)}`],
-                  ['Đơn giá điện', `${formatVnd(listing.electricity)}/kWh · ${listing.electricityType}`],
+                  ['Đơn giá điện', `${formatVnd(listing.electricity)}/kWh · ${listing.electricityType === 'state' ? 'Nhà nước' : listing.electricityType}`],
                   ['Tiền nước', listing.waterType === 'Đầu người' ? `${formatVnd(listing.water)}/người/tháng` : `${formatVnd(listing.water)}/m³`],
                   ['Internet', listing.internet === 0 ? 'Miễn phí' : formatVnd(listing.internet)],
                   ['Phí gửi xe máy', listing.parkingBike === 0 ? 'Miễn phí' : formatVnd(listing.parkingBike)],
@@ -490,33 +656,134 @@ export default function ListingDetailPage() {
 
             {/* Reviews */}
             <div className="mb-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-[#151515]">
-                ⭐ Đánh giá ({listingReviews.length})
-              </h2>
-              {listingReviews.length === 0 ? (
-                <p className="text-sm text-[#151515]/50">Chưa có đánh giá nào.</p>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-base font-bold text-[#151515]">
+                  ⭐ Đánh giá
+                  {reviewStats ? (
+                    <span className="text-sm font-normal text-[#151515]/60">
+                      {reviewStats.avgRating.toFixed(1)}/5 ({reviewStats.totalReviews} đánh giá)
+                    </span>
+                  ) : (
+                    <span className="text-sm font-normal text-[#151515]/60">
+                      ({reviews.length})
+                    </span>
+                  )}
+                </h2>
+                {user ? (
+                  canReview ? (
+                    <button
+                      onClick={() => setShowReviewModal(true)}
+                      className="rounded-xl border-2 border-[#151515] bg-yellow-400 px-4 py-2 text-sm font-bold shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#151515]"
+                    >
+                      ✏️ Viết đánh giá
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      title={reviewEligibility?.reason || 'Bạn chưa đủ điều kiện đánh giá'}
+                      className="cursor-not-allowed rounded-xl border-2 border-gray-300 bg-gray-100 px-4 py-2 text-sm font-bold text-gray-400"
+                    >
+                      ✏️ Viết đánh giá
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={() => router.push(`/dang-nhap?redirect=/phong/${id}`)}
+                    className="rounded-xl border-2 border-[#151515] bg-yellow-400 px-4 py-2 text-sm font-bold shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#151515]"
+                  >
+                    ✏️ Viết đánh giá
+                  </button>
+                )}
+              </div>
+
+              {/* Review eligibility notice */}
+              {user && !canReview && reviewEligibility && !reviewEligibility.eligible && (
+                <div className="mb-4 rounded-xl border-2 border-blue-300 bg-blue-50 p-4">
+                  <p className="text-sm text-blue-700">
+                    {reviewEligibility.reason}
+                  </p>
+                </div>
+              )}
+
+              {/* Star Distribution */}
+              {reviewStats && reviewStats.totalReviews > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {[5, 4, 3, 2, 1].map((star) => {
+                    const count = reviewStats.starDistribution[star] || 0
+                    const percent = reviewStats.totalReviews > 0 ? (count / reviewStats.totalReviews) * 100 : 0
+                    return (
+                      <div key={star} className="flex items-center gap-2 text-sm">
+                        <span className="w-6 text-[#151515]/60">{star}★</span>
+                        <div className="h-2 w-24 rounded-full bg-gray-200">
+                          <div
+                            className="h-2 rounded-full bg-yellow-400"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <span className="w-8 text-[#151515]/60">{count}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {reviews.length === 0 ? (
+                <div className="rounded-xl border-2 border-[#151515]/20 bg-[#F5F5F0] p-8 text-center">
+                  <p className="text-sm text-[#151515]/50">Chưa có đánh giá nào.</p>
+                  <p className="mt-1 text-xs text-[#151515]/30">Hãy là người đầu tiên đánh giá!</p>
+                </div>
               ) : (
-                <div className="space-y-3">
-                  {listingReviews.map((review) => (
-                    <div key={review.id} className="rounded-xl border-[2px] border-[#151515] bg-white p-4 shadow-[3px_3px_0_#151515]">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-[#151515]">{review.author}</span>
-                        <div className="flex items-center gap-1">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`size-3.5 ${i < review.score ? 'fill-[#FDE047] text-[#FDE047]' : 'text-gray-300'}`}
-                            />
-                          ))}
+                <div className="space-y-4">
+                  {reviews.map((review: any) => (
+                    <div key={review.id} className="rounded-xl border-2 border-[#151515] bg-white p-4 shadow-[3px_3px_0_#151515]">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="flex size-8 items-center justify-center rounded-full bg-[#F5F5F0] text-xs font-bold text-[#151515]">
+                              {review.author?.initials || review.author?.fullName?.slice(0, 2).toUpperCase() || 'NT'}
+                            </span>
+                            <div>
+                              <span className="font-bold text-[#151515]">
+                                {review.author?.fullName || 'Người dùng'}
+                              </span>
+                              {review.verifiedStay && (
+                                <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                                  ✓ Đã xem phòng
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`size-3.5 ${i < Math.round(review.score) ? 'fill-[#FDE047] text-[#FDE047]' : 'text-gray-300'}`}
+                              />
+                            ))}
+                            <span className="ml-1 text-xs text-[#151515]/50">
+                              {new Date(review.createdAt).toLocaleDateString('vi-VN')}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <p className="mt-2 text-sm text-[#151515]/70">{review.text}</p>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-[#151515]/50 sm:grid-cols-4">
-                        <span>📷 Giống ảnh: {review.photoMatch}/5</span>
-                        <span>👤 Thái độ chủ: {review.landlord}/5</span>
-                        <span>🔒 An ninh: {review.security}/5</span>
-                        <span>🧹 Vệ sinh: {review.hygiene}/5</span>
-                      </div>
+                      {review.text && (
+                        <p className="mt-3 text-sm text-[#151515]/80">{review.text}</p>
+                      )}
+                      {(review.photoMatch || review.landlord || review.security || review.hygiene) && (
+                        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-[#F5F5F0] p-3 text-[10px] sm:grid-cols-4">
+                          {review.photoMatch && <span>📷 Giống ảnh: {review.photoMatch}/5</span>}
+                          {review.landlord && <span>👤 Thái độ chủ: {review.landlord}/5</span>}
+                          {review.security && <span>🔒 An ninh: {review.security}/5</span>}
+                          {review.hygiene && <span>🧹 Vệ sinh: {review.hygiene}/5</span>}
+                        </div>
+                      )}
+                      {/* Seller Response */}
+                      {review.sellerResponse && (
+                        <div className="mt-3 rounded-xl border-2 border-blue-200 bg-blue-50 p-3">
+                          <p className="text-xs font-semibold text-blue-700">Phản hồi từ chủ trọ:</p>
+                          <p className="mt-1 text-sm text-blue-800">{review.sellerResponse}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -573,11 +840,15 @@ export default function ListingDetailPage() {
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-[#F5F5F0] p-2 text-center border-[1.5px] border-[#151515]/10">
                       <p className="text-[10px] text-[#151515]/50">Phản hồi</p>
-                      <p className="font-bold text-[#151515]">{seller.responseRate}%</p>
+                      <p className="font-bold text-[#151515]">{seller.responseRate ? `${Math.round(seller.responseRate)}%` : 'N/A'}</p>
                     </div>
                     <div className="rounded-xl bg-[#F5F5F0] p-2 text-center border-[1.5px] border-[#151515]/10">
                       <p className="text-[10px] text-[#151515]/50">Điểm uy tín</p>
-                      <p className="font-bold text-[#151515]">{seller.trustScore}/5</p>
+                      <p className="font-bold text-[#151515]">
+                        {seller.trustScore != null 
+                          ? `${seller.trustScore.toFixed(0)}%` 
+                          : 'N/A'}
+                      </p>
                     </div>
                   </div>
 
@@ -635,14 +906,18 @@ export default function ListingDetailPage() {
                     <Eye className="size-4" />
                     Lượt xem
                   </span>
-                  <span className="font-semibold text-[#151515]">{listing.views.toLocaleString()}</span>
+                  <span className="font-semibold text-[#151515]">{listing.views.toLocaleString('vi-VN')}</span>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5 text-[#151515]/60">
                     <Star className="size-4" />
                     Đánh giá
                   </span>
-                  <span className="font-semibold text-[#151515]">{listing.rating}/5 ({listing.reviewCount})</span>
+                  <span className="font-semibold text-[#151515]">
+                    {reviewStats && reviewStats.totalReviews > 0 
+                      ? `${reviewStats.avgRating.toFixed(1)}/5 (${reviewStats.totalReviews})`
+                      : '(0)'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -655,7 +930,8 @@ export default function ListingDetailPage() {
       {/* Booking Modal */}
       {showBookingModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#151515]/50 p-4 sm:p-5"
+          key="booking-modal"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#151515]/50 p-4 sm:p-5"
           onClick={(e) => {
             if (e.target === e.currentTarget) closeBookingModal()
           }}
@@ -706,8 +982,11 @@ export default function ListingDetailPage() {
                         unoptimized
                       />
                       {listing.vip && (
-                        <span className="absolute -top-1.5 -right-1.5 rounded bg-[#151515] px-1.5 py-0.5 text-[9px] font-bold text-white">
-                          VIP
+                        <span 
+                          className="absolute -top-1.5 -right-1.5 rounded bg-gradient-to-r from-emerald-500 to-green-400 px-1.5 py-0.5 text-[9px] font-black text-white border-[1.5px] border-[#151515]"
+                          style={{ boxShadow: '0 0 6px 1px rgba(34, 197, 94, 0.5)' }}
+                        >
+                          ⭐ VIP
                         </span>
                       )}
                     </div>
@@ -738,7 +1017,7 @@ export default function ListingDetailPage() {
                             setFormErrors({ ...formErrors, date: '' })
                           }
                         }}
-                        min={getMinDate()}
+                        min={minDate}
                         className={`h-12 w-full rounded-xl border-[2px] bg-[#F5F5F0] px-4 text-sm shadow-[2px_2px_0_#151515] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30 ${
                           formErrors.date 
                             ? 'border-red-500 focus:border-red-500 focus:ring-red-500/30' 
@@ -864,6 +1143,174 @@ export default function ListingDetailPage() {
                         <Calendar className="size-4" />
                         Gửi yêu cầu hẹn xem
                       </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#151515]/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowReviewModal(false)
+          }}
+        >
+          <div className="w-full max-w-lg rounded-2xl border-[3px] border-[#151515] bg-white shadow-[6px_6px_0_#151515] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b-[2px] border-[#151515] bg-[#F5F5F0] p-4 sm:p-5">
+              <div>
+                <h2 className="text-lg font-black text-[#151515]">ĐÁNH GIÁ PHÒNG TRỌ</h2>
+                <p className="mt-0.5 text-xs text-[#151515]/60">Chia sẻ trải nghiệm của bạn</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReviewModal(false)}
+                className="flex size-10 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-white text-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:bg-[#151515] hover:text-white"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {reviewSuccess ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-[#059669] text-4xl text-white">
+                  ✓
+                </div>
+                <h3 className="text-xl font-bold text-[#151515]">Cảm ơn bạn!</h3>
+                <p className="mt-2 text-sm text-[#151515]/60">
+                  Đánh giá của bạn đã được gửi thành công.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="p-4 sm:p-5 space-y-5">
+                  {/* Overall Score */}
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#151515]">
+                      Điểm tổng quát <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setReviewForm(f => ({ ...f, score: star }))}
+                          className="size-10 rounded-xl border-2 border-[#151515] transition-all hover:scale-110"
+                        >
+                          <Star
+                            className={`size-full p-1 ${star <= reviewForm.score ? 'fill-[#FDE047] text-[#FDE047]' : 'text-gray-300'}`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Written Review */}
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#151515]">
+                      Nhận xét của bạn
+                    </label>
+                    <textarea
+                      value={reviewForm.text}
+                      onChange={(e) => setReviewForm(f => ({ ...f, text: e.target.value }))}
+                      placeholder="Chia sẻ trải nghiệm của bạn về phòng trọ này..."
+                      className="min-h-24 w-full rounded-xl border-2 border-[#151515] bg-[#F5F5F0] p-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none resize-none"
+                      maxLength={1000}
+                    />
+                    <p className="mt-1 text-xs text-[#151515]/50">{reviewForm.text.length}/1000</p>
+                  </div>
+
+                  {/* Detailed Ratings */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { key: 'photoMatch', label: '📷 Giống ảnh' },
+                      { key: 'landlord', label: '👤 Thái độ chủ nhà' },
+                      { key: 'security', label: '🔒 An ninh' },
+                      { key: 'hygiene', label: '🧹 Vệ sinh' },
+                    ].map((item) => (
+                      <div key={item.key}>
+                        <label className="mb-1 block text-xs font-semibold text-[#151515]">
+                          {item.label}
+                        </label>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setReviewForm(f => ({ ...f, [item.key]: star }))}
+                              className="size-7 rounded border border-[#151515]/20 transition-all"
+                            >
+                              <Star
+                                className={`size-full p-0.5 ${star <= (reviewForm as any)[item.key] ? 'fill-[#FDE047] text-[#FDE047]' : 'text-gray-300'}`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Error */}
+                  {reviewError && (
+                    <div className="flex items-start gap-2 rounded-xl border-2 border-red-500 bg-red-50 p-3">
+                      <span className="text-base text-red-500">⚠️</span>
+                      <p className="text-sm text-red-600">{reviewError}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex gap-3 border-t-[2px] border-[#151515] bg-[#F5F5F0] p-4 sm:p-5">
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewModal(false)}
+                    disabled={reviewLoading}
+                    className="flex-1 rounded-xl border-[2px] border-[#151515] bg-white py-3 text-sm font-semibold text-[#151515] shadow-[3px_3px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setReviewLoading(true)
+                      setReviewError('')
+                      try {
+                        await tenantApi.createReview({
+                          listingId: id,
+                          score: reviewForm.score,
+                          text: reviewForm.text,
+                          photoMatch: reviewForm.photoMatch,
+                          landlord: reviewForm.landlord,
+                          security: reviewForm.security,
+                          hygiene: reviewForm.hygiene,
+                        })
+                        setReviewSuccess(true)
+                        // Refresh reviews
+                        const res: any = await tenantApi.getListingReviews(id)
+                        setReviews(res.reviews || [])
+                        setReviewStats(res.stats || null)
+                        setCanReview(false)
+                      } catch (err: any) {
+                        setReviewError(err.message || 'Không thể gửi đánh giá')
+                      } finally {
+                        setReviewLoading(false)
+                      }
+                    }}
+                    disabled={reviewLoading}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#FDE047] py-3 text-sm font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
+                  >
+                    {reviewLoading ? (
+                      <>
+                        <span className="size-4 animate-spin rounded-full border-2 border-[#151515] border-t-transparent" />
+                        Đang gửi...
+                      </>
+                    ) : (
+                      'Gửi đánh giá'
                     )}
                   </button>
                 </div>

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { ReportsCenter } from '@/components/manager-portal'
 
 export default function ManagerReportsPage() {
