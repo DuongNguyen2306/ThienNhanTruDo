@@ -5,6 +5,11 @@
 
 const swaggerJsdoc = require('swagger-jsdoc');
 
+const swaggerJsdoc = require('swagger-jsdoc');
+
+// Dynamic servers based on environment
+const isProduction = process.env.NODE_ENV === 'production';
+
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -18,8 +23,12 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3005',
-        description: 'Development Server',
+        url: 'https://thiennhantrudo-be.onrender.com',
+        description: '🚀 Production Server (Render)',
+      },
+      {
+        url: 'http://localhost:3001',
+        description: '💻 Development Server',
       },
     ],
     components: {

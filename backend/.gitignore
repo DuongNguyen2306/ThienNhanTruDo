@@ -1,0 +1,176 @@
+# ================================================
+# 📦 Dependencies
+# ================================================
+node_modules/
+.pnp
+.pnp.js
+yarn.lock
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ================================================
+# 🌐 Environment Variables (NHẠY CẢM - TUYỆT ĐỐI KHÔNG COMMIT)
+# ================================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+*.env
+.envrc
+
+# ================================================
+# 🏗️ Build & Distribution
+# ================================================
+dist/
+build/
+out/
+.next/
+.nuxt/
+output/
+*.tsbuildinfo
+
+# ================================================
+# 📁 Logs & Cache
+# ================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ================================================
+# 🖼️ Uploads & Temp Files
+# ================================================
+uploads/
+uploads-temp/
+temp/
+tmp/
+*.tmp
+*.temp
+
+# ================================================
+# 💾 Database (SQLite, local DB files)
+# ================================================
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+/data/
+
+# ================================================
+# 🧪 Testing
+# ================================================
+coverage/
+.nyc_output/
+.stryker-tmp/
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ================================================
+# 🔧 IDE & Editor
+# ================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ================================================
+# 🗑️ OS Files (Rác hệ điều hành)
+# ================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+~
+.Directory
+.DiskUsage
+.Trash-*
+.Trash-1000
+
+# ================================================
+# 🔒 Security & Secrets
+# ================================================
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+credentials.json
+secrets.json
+*.secret
+service-account.json
+
+# ================================================
+# 📱 Mobile & Framework Specific
+# ================================================
+.expo/
+.expo-shared/
+android/
+ios/
+*.xcworkspace
+*.xcuserstate
+
+# NestJS specific
+ NestJS/dist/
+
+# ================================================
+# 🌊 Misc
+# ================================================
+*.tsbuildinfo
+.eslintcache
+.npm
+.eslintcache
+.stylelintcache
+*.pid
+*.seed
+*.pid.lock
+server.js.lck
+routes.js.lck
+components.d.ts
+
+# ================================================
+# 🚀 Dịch vụ Cloud & DevOps
+# ================================================
+.vercel
+.now
+.netlify
+.serverless/
+serverless.yml
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Docker
+.docker/
+
+# ================================================
+# 📊 Documentation (nếu muốn bỏ qua)
+# ================================================
+# docs/_build/
+# doc/_build/

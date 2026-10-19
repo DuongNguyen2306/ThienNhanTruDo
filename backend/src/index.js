@@ -25,8 +25,30 @@ const geocodeRoutes = require('./routes/geocode');
 const app = express();
 
 // Middleware
+// CORS - cho phép nhiều origins
+const allowedOrigins = [
+  'http://localhost:3000',           // Dev frontend
+  'http://localhost:5173',            // Vite dev
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'https://thien-nhan-tru-do-kappa.vercel.app', // Production frontend
+];
+
+// Thêm production frontend URLs từ env (comma separated)
+if (process.env.FRONTEND_URL) {
+  const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim());
+  allowedOrigins.push(...extraUrls);
+}
+
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: Origin ${origin} not allowed`));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -48,8 +70,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Swagger UI - chỉ bật trong development
-if (config.nodeEnv === 'development') {
+// Swagger UI - bật trong cả development và production
+if (config.nodeEnv === 'development' || config.enableSwaggerInProduction) {
   // OpenAPI JSON spec
   app.get('/api-docs.json', (req, res) => {
     res.json(openApiSpec);

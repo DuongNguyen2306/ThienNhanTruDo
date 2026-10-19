@@ -24,6 +24,7 @@ if (nodeEnv === 'production' && jwtSecret.length < 32) {
 module.exports = {
   port: process.env.PORT || 3001,
   nodeEnv,
+  enableSwaggerInProduction: process.env.ENABLE_SWAGGER === 'true',
   jwt: {
     secret: jwtSecret,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',

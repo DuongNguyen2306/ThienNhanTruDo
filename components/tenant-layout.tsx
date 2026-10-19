@@ -47,7 +47,7 @@ function TenantSidebar() {
       return
     }
     
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://thiennhantrudo-be.onrender.com'
     fetch(`${API_URL}/api/tenant/appointments?status=pending`, {
       headers: { Authorization: `Bearer ${token}` },
     })

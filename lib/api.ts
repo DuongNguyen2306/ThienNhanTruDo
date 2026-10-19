@@ -1,6 +1,6 @@
 // API Client for Thiên Nhãn Backend
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3005'
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'https://thiennhantrudo-be.onrender.com'
 
 // Helper to get full URL for backend-served files (uploads, etc.)
 export function getBackendUrl(path: string): string {

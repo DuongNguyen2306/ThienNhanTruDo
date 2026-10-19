@@ -41,7 +41,7 @@ export default function ThongTinPage() {
     if (!user) return
     const loadProfile = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://thiennhantrudo-be.onrender.com'
         const token = localStorage.getItem('api_token') || ''
         const res = await fetch(`${API_URL}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${token}` },
