@@ -6,6 +6,7 @@ import { Search } from 'lucide-react'
 import { BrutalHeader } from '@/components/brutal-header'
 import { BrutalFooter } from '@/components/brutal-footer'
 import { BrutalListingCard } from '@/components/brutal-listing-card'
+import { WebsiteReviewSection } from '@/components/website-reviews'
 import { listingApi, type Listing as ApiListing } from '@/lib/api'
 
 const ROOM_TYPES = [
@@ -193,6 +194,9 @@ export default function ClientPage() {
           </div>
         </div>
       </section>
+
+      {/* Website Reviews (Task 3) */}
+      <WebsiteReviewSection />
 
       {/* CTA Section */}
       <section className="py-12">

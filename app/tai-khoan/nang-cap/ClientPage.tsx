@@ -24,6 +24,8 @@ interface PackageOrder {
   packageDays: number;
   status: string;
   expiresAt: string;
+  createdAt: string;
+  proofUploadedAt?: string;
   bankAccount?: {
     bankName: string;
     bankBin: string;
@@ -59,7 +61,7 @@ export default function PackagePurchasePage() {
 
   const fetchPackages = async () => {
     try {
-      const res = await api.get(`/payment/packages?role=${user?.role || 'tenant'}`);
+      const res = await api.get<{ packages: Package[] }>(`/api/payment/packages?role=${user?.role || 'tenant'}`);
       setPackages(res.data.packages || []);
     } catch (err) {
       console.error('Error fetching packages:', err);
@@ -70,7 +72,7 @@ export default function PackagePurchasePage() {
 
   const fetchOrders = async () => {
     try {
-      const res = await api.get('/payment/my-orders');
+      const res = await api.get<{ orders: PackageOrder[] }>('/api/payment/my-orders');
       setOrders(res.data.orders || []);
     } catch (err) {
       console.error('Error fetching orders:', err);
@@ -82,22 +84,23 @@ export default function PackagePurchasePage() {
       alert('Gói miễn phí không cần thanh toán');
       return;
     }
-    
+
     try {
-      const res = await api.post('/payment/create-order', { packageId: pkg.id });
+      const res = await api.post<{ success: boolean; order: PackageOrder }>('/api/payment/create-order', { packageId: pkg.id });
       if (res.data.success) {
         setCurrentOrder(res.data.order);
         setSelectedPackage(pkg);
         fetchQRCode(res.data.order.id);
       }
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Lỗi khi tạo đơn hàng');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      alert(error.response?.data?.error || 'Lỗi khi tạo đơn hàng');
     }
   };
 
   const fetchQRCode = async (orderId: string) => {
     try {
-      const res = await api.get(`/payment/vietqr/${orderId}`);
+      const res = await api.get<{ qrUrl: string }>(`/api/payment/vietqr/${orderId}`);
       setQrUrl(res.data.qrUrl);
     } catch (err) {
       console.error('Error fetching QR:', err);
@@ -123,13 +126,12 @@ export default function PackagePurchasePage() {
       formData.append('proof', file);
 
       try {
-        await api.post('/payment/upload-proof', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.post('/api/payment/upload-proof', formData);
         alert('Đã gửi minh chứng thanh toán');
         fetchOrders();
-      } catch (err: any) {
-        alert(err.response?.data?.error || 'Lỗi khi tải lên');
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { error?: string } } };
+        alert(error.response?.data?.error || 'Lỗi khi tải lên');
       }
     };
     input.click();

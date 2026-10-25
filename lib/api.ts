@@ -15,26 +15,78 @@ interface ApiOptions {
   headers?: Record<string, string>
 }
 
+// Envelope returned by the verb helpers (api.get / api.post / ...).
+export interface ApiResponse<T = unknown> {
+  data: T
+  status: number
+}
+
 class ApiError extends Error {
   status: number
   data?: unknown
+  response?: { status: number; data: unknown }
 
   constructor(message: string, status: number, data?: unknown) {
     super(message)
     this.status = status
     this.data = data
+    this.response = { status, data }
   }
 }
 
-async function api<T = unknown>(
+/**
+ * Build a human-readable message from an API error payload.
+ *
+ * The backend's `validate` middleware answers with the generic
+ * "Dữ liệu không hợp lệ" plus a `details` array produced by
+ * express-validator. That generic string tells the user nothing, so the
+ * per-field messages are surfaced instead. When there are no details (or the
+ * payload is not the expected shape) the original error message is used
+ * unchanged.
+ */
+function describeApiError(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined
+
+  const { error, details } = data as { error?: string; details?: unknown }
+
+  if (Array.isArray(details) && details.length > 0) {
+    const messages = details
+      .map((d) => {
+        if (!d || typeof d !== 'object') return null
+        const { msg, path } = d as { msg?: string; path?: string }
+        if (!msg) return null
+        return path ? `${msg} (${path})` : msg
+      })
+      .filter((m): m is string => Boolean(m))
+
+    if (messages.length > 0) {
+      // Keep the generic headline only when it adds no information.
+      return error && error !== 'Dữ liệu không hợp lệ'
+        ? `${error}: ${messages.join(', ')}`
+        : messages.join(', ')
+    }
+  }
+
+  return typeof error === 'string' ? error : undefined
+}
+
+async function request<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
-): Promise<T> {
+): Promise<ApiResponse<T>> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
 
+  // FormData bodies must be sent as-is: the browser has to add the multipart
+  // boundary itself, so we must not force a JSON content type.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...options.headers,
+  }
+
+  if (isFormData) {
+    delete headers['Content-Type']
   }
 
   if (token) {
@@ -49,7 +101,11 @@ async function api<T = unknown>(
     const res = await fetch(`${API_BASE}${endpoint}`, {
       method: options.method ?? 'GET',
       headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: isFormData
+        ? (options.body as FormData)
+        : options.body
+          ? JSON.stringify(options.body)
+          : undefined,
       signal: controller.signal,
     })
     clearTimeout(timeoutId)
@@ -58,13 +114,13 @@ async function api<T = unknown>(
 
     if (!res.ok) {
       throw new ApiError(
-        (data as { error?: string })?.error ?? 'Lỗi server',
+        describeApiError(data) ?? 'Lỗi server',
         res.status,
         data
       )
     }
 
-    return data as T
+    return { data: data as T, status: res.status }
   } catch (err) {
     clearTimeout(timeoutId)
     if (err instanceof Error && err.name === 'AbortError') {
@@ -74,19 +130,60 @@ async function api<T = unknown>(
   }
 }
 
-// Export the base api function for custom calls
-export { api }
+async function apiBase<T = unknown>(
+  endpoint: string,
+  options: ApiOptions = {}
+): Promise<T> {
+  const { data } = await request<T>(endpoint, options)
+  return data
+}
+
+// The client can be called directly (api(url, { method })) or through the
+// verb helpers (api.get / api.post / api.put / api.delete).
+export interface ApiClient {
+  <T = unknown>(endpoint: string, options?: ApiOptions): Promise<T>
+  get<T = unknown>(endpoint: string, options?: ApiOptions): Promise<ApiResponse<T>>
+  post<T = unknown>(endpoint: string, body?: unknown, options?: ApiOptions): Promise<ApiResponse<T>>
+  put<T = unknown>(endpoint: string, body?: unknown, options?: ApiOptions): Promise<ApiResponse<T>>
+  delete<T = unknown>(endpoint: string, options?: ApiOptions): Promise<ApiResponse<T>>
+}
+
+export const api: ApiClient = Object.assign(apiBase, {
+  get: <T = unknown>(endpoint: string, options: ApiOptions = {}) =>
+    request<T>(endpoint, { ...options, method: 'GET' }),
+  post: <T = unknown>(endpoint: string, body?: unknown, options: ApiOptions = {}) =>
+    request<T>(endpoint, { ...options, method: 'POST', body }),
+  put: <T = unknown>(endpoint: string, body?: unknown, options: ApiOptions = {}) =>
+    request<T>(endpoint, { ...options, method: 'PUT', body }),
+  delete: <T = unknown>(endpoint: string, options: ApiOptions = {}) =>
+    request<T>(endpoint, { ...options, method: 'DELETE' }),
+})
 
 // Auth API
 export const authApi = {
-  login: (phone: string, password: string) =>
+  /**
+   * Signs in with EITHER a phone number OR an e-mail address.
+   *
+   * The value is sent as `identifier`. `phone` is still included as well so
+   * that older backend deployments — which only read `phone` — keep working.
+   */
+  login: (identifier: string, password: string) =>
     api<{ user: SessionUser; token: string }>('/api/auth/login', {
       method: 'POST',
-      body: { phone, password },
+      body: { identifier, phone: identifier, password },
     }),
 
   register: (data: RegisterData) =>
-    api<{ user: SessionUser; token: string }>('/api/auth/register', {
+    api<{
+      message: string
+      requiresVerification: boolean
+      email: string
+      phone: string
+      resendAvailableIn: number
+      // The account exists but is NOT usable until the e-mail is verified,
+      // so no token is issued at this point.
+      user: Omit<SessionUser, 'token'>
+    }>('/api/auth/register', {
       method: 'POST',
       body: data,
     }),
@@ -95,15 +192,100 @@ export const authApi = {
     api<{ user: SessionUser }>('/api/auth/me'),
 
   updateProfile: (data: Partial<ProfileData>) =>
-    api<{ user: SessionUser }>('/api/auth/profile', {
+    api<{
+      user: SessionUser
+      message?: string
+      // Set when the address changed: an OTP is sent to the NEW address and
+      // the change is only applied once it is confirmed.
+      requiresEmailConfirmation?: boolean
+      pendingEmail?: string
+      resendAvailableIn?: number
+    }>('/api/auth/profile', {
       method: 'PUT',
       body: data,
     }),
 
+  // Confirms an e-mail CHANGE with the OTP that was sent to the new address.
+  verifyEmailChange: (data: { email: string; otp: string }) =>
+    api<{
+      message: string
+      requiresEmailConfirmation: boolean
+      user: SessionUser
+    }>('/api/auth/verify-email-change', {
+      method: 'POST',
+      body: data,
+    }),
+
+  // Re-sends the e-mail-change OTP to the pending address.
+  resendEmailChange: () =>
+    api<{
+      message: string
+      pendingEmail: string
+      resendAvailableIn: number
+    }>('/api/auth/resend-email-change', {
+      method: 'POST',
+    }),
+
   changePassword: (currentPassword: string, newPassword: string) =>
-    api<{ message: string }>('/api/auth/password', {
+    api<{ message: string; sessionsInvalidated: boolean; token: string }>('/api/auth/password', {
       method: 'PUT',
       body: { currentPassword, newPassword },
+    }),
+
+  // ── Task 7: email OTP flows ───────────────────────────────────────────
+  // Verifies the registration OTP and activates the account. Returns a token
+  // so the user is signed in immediately after verification.
+  verifyEmail: (data: { email: string; otp: string }) =>
+    api<{
+      message: string
+      requiresVerification: boolean
+      token: string
+      user: SessionUser
+    }>('/api/auth/verify-email', {
+      method: 'POST',
+      body: data,
+    }),
+
+  // Re-sends the registration verification OTP.
+  resendVerification: (data: { email: string }) =>
+    api<{
+      message: string
+      alreadyVerified?: boolean
+      resendAvailableIn: number
+    }>('/api/auth/resend-verification', {
+      method: 'POST',
+      body: data,
+    }),
+
+  // Starts the forgot-password flow. The user identifies themselves by
+  // e-mail. The response never reveals whether the address is registered:
+  // the same message and payload are returned either way.
+  forgotPassword: (email: string) =>
+    api<{
+      message: string
+      sent: boolean
+      resendAvailableIn: number
+    }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: { email },
+    }),
+
+  // Completes the password reset using the emailed OTP.
+  resetPassword: (data: { email: string; otp: string; newPassword: string }) =>
+    api<{ message: string; sessionsInvalidated: boolean }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: data,
+    }),
+
+  // Re-sends the password-reset OTP.
+  resendPasswordReset: (email: string) =>
+    api<{
+      message: string
+      sent: boolean
+      resendAvailableIn: number
+    }>('/api/auth/resend-password-reset', {
+      method: 'POST',
+      body: { email },
     }),
 
   logout: () =>
@@ -607,6 +789,69 @@ export const managerApi = {
   },
 }
 
+// Website Review API (Task 3)
+// A rating for the PLATFORM itself, separate from room reviews.
+// Eligibility is enforced server-side; the frontend only renders the result.
+export const websiteReviewApi = {
+  // Public aggregate: average rating + total review count.
+  getSummary: () =>
+    api<WebsiteReviewSummary>('/api/website-reviews/summary'),
+
+  // Public list of published reviews.
+  getList: (params?: { page?: number; limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.append('page', String(params.page))
+    if (params?.limit) searchParams.append('limit', String(params.limit))
+    const query = searchParams.toString()
+    return api<{ reviews: WebsiteReview[]; pagination: Pagination }>(
+      `/api/website-reviews${query ? `?${query}` : ''}`
+    )
+  },
+
+  // Whether the CURRENT user may submit a review.
+  getEligibility: () =>
+    api<{
+      eligible: boolean
+      reason: string
+      canEdit: boolean
+      existingReviewId: string | null
+      qualifyingTransactions: QualifyingTransaction[]
+    }>('/api/website-reviews/eligibility'),
+
+  // The current user's own review.
+  getMyReview: () =>
+    api<{ review: any | null; reviews: any[] }>('/api/website-reviews/mine'),
+
+  // Submit a review. The backend re-checks eligibility and rejects duplicates.
+  submitReview: (data: {
+    transactionId: string
+    score: number
+    title?: string
+    content: string
+  }) =>
+    api<{
+      message: string
+      review: WebsiteReview
+      average: number
+      totalReviews: number
+    }>('/api/website-reviews', {
+      method: 'POST',
+      body: data,
+    }),
+
+  // Update the current user's own review.
+  updateReview: (id: string, data: { score?: number; title?: string; content?: string }) =>
+    api<{
+      message: string
+      review: any
+      average: number
+      totalReviews: number
+    }>(`/api/website-reviews/${id}`, {
+      method: 'PUT',
+      body: data,
+    }),
+}
+
 // Admin API
 export const adminApi = {
   getDashboard: () =>
@@ -717,8 +962,12 @@ export const adminApi = {
     )
   },
 
-  getFinanceOverview: () =>
-    api<{
+  getFinanceOverview: (params?: { startDate?: string; endDate?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.startDate) searchParams.append('startDate', params.startDate)
+    if (params?.endDate) searchParams.append('endDate', params.endDate)
+    const query = searchParams.toString()
+    return api<{
       totalRevenue: number
       periodRevenue: number
       completedCount: number
@@ -726,22 +975,119 @@ export const adminApi = {
       netRevenue: number
       pendingCount: number
       transactionCount: number
-    }>('/api/admin/finance/overview'),
+      totalDeposits: number
+      totalWithdrawals: number
+      pendingAmount: number
+      failedAmount: number
+      failedCount: number
+      revenueCount: number
+      refundCount: number
+      depositCount: number
+      categories: RevenueCategory[]
+      hasRange: boolean
+    }>(`/api/admin/finance/overview${query ? `?${query}` : ''}`)
+  },
 
-  getFinanceChart: (params?: { period: 'day' | 'week' | 'month' | 'quarter' | 'year'; startDate?: string; endDate?: string }) => {
+  getFinanceChart: (params?: { period?: 'day' | 'week' | 'month' | 'quarter' | 'year'; startDate?: string; endDate?: string }) => {
     const searchParams = new URLSearchParams()
     if (params?.period) searchParams.append('period', params.period)
     if (params?.startDate) searchParams.append('startDate', params.startDate)
     if (params?.endDate) searchParams.append('endDate', params.endDate)
     const query = searchParams.toString()
-    return api<Array<{ label: string; revenue: number; count: number; refunds: number }>>(
+    return api<FinanceChartPoint[]>(
       `/api/admin/finance/chart${query ? `?${query}` : ''}`
     )
   },
 
-  getFinanceSources: () =>
-    api<Array<{ type: string; total: number; count: number; percentage: number }>>(
-      '/api/admin/finance/sources'
+  // Revenue breakdown by product category.
+  // NOTE: `revenue` and `nonRevenue` are kept apart so a wallet top-up can
+  // never be presented as earned revenue.
+  getFinanceSources: (params?: { startDate?: string; endDate?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.startDate) searchParams.append('startDate', params.startDate)
+    if (params?.endDate) searchParams.append('endDate', params.endDate)
+    const query = searchParams.toString()
+    return api<{
+      revenue: RevenueCategory[]
+      nonRevenue: RevenueCategory[]
+      grossRevenue: number
+      netRevenue: number
+      totalDeposits: number
+      totalRefunded: number
+    }>(`/api/admin/finance/sources${query ? `?${query}` : ''}`)
+  },
+
+  // ── Task 4: user growth chart ─────────────────────────────────────────
+  getUsersGrowth: (params?: { period?: string; buckets?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.period) searchParams.append('period', params.period)
+    if (params?.buckets) searchParams.append('buckets', String(params.buckets))
+    const query = searchParams.toString()
+    return api<{ period: string; series: UserGrowthPoint[] }>(
+      `/api/admin/dashboard/users-growth${query ? `?${query}` : ''}`
+    )
+  },
+
+  // ── Task 5: admin review history ──────────────────────────────────────
+  getAdminReviews: (params?: {
+    type?: 'all' | 'website' | 'room'
+    search?: string
+    status?: string
+    score?: number
+    startDate?: string
+    endDate?: string
+    page?: number
+    limit?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.type) searchParams.append('type', params.type)
+    if (params?.search) searchParams.append('search', params.search)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.score) searchParams.append('score', String(params.score))
+    if (params?.startDate) searchParams.append('startDate', params.startDate)
+    if (params?.endDate) searchParams.append('endDate', params.endDate)
+    if (params?.page) searchParams.append('page', String(params.page))
+    if (params?.limit) searchParams.append('limit', String(params.limit))
+    const query = searchParams.toString()
+    return api<{
+      reviews: AdminReviewItem[]
+      pagination: Pagination
+      counts: { website: number; room: number }
+    }>(`/api/admin/reviews${query ? `?${query}` : ''}`)
+  },
+
+  getAdminReviewStats: () =>
+    api<{
+      website: {
+        average: number
+        totalReviews: number
+        distribution: Record<string, number>
+        hiddenCount: number
+        flaggedCount: number
+      }
+      room: { totalReviews: number; hiddenCount: number }
+    }>('/api/admin/reviews/stats'),
+
+  // Moderation actions on a website review (Task 5).
+  moderateWebsiteReview: (
+    id: string,
+    action: 'hide' | 'unhide' | 'flag' | 'reply',
+    reason?: string
+  ) =>
+    api<{
+      message: string
+      review: any
+      average: number
+      totalReviews: number
+    }>(`/api/website-reviews/admin/${id}`, {
+      method: 'PATCH',
+      body: { action, reason },
+    }),
+
+  // Full detail of a website review incl. the live qualifying transaction.
+  getWebsiteReviewDetail: (id: string) =>
+    api<{ review: any; transaction: Transaction | null }>(
+      `/api/website-reviews/admin/${id}`
     ),
 
   getConfig: () =>
@@ -1055,8 +1401,12 @@ export type RegisterData = {
   phone: string
   password: string
   fullName: string
-  email?: string
-  role?: 'tenant' | 'seller'
+  // The backend REQUIRES a valid e-mail: it is the delivery channel for the
+  // registration verification OTP (Task 7).
+  email: string
+  // NOTE: there is intentionally NO `role` field. Public registration always
+  // creates a TENANT account — the backend ignores any role sent by the
+  // client. Sellers are created through the upgrade request flow.
 }
 
 export type ProfileData = {
@@ -1265,10 +1615,138 @@ export type AdminDashboardStats = {
   totalSellers: number
   totalTransactions: number
   totalRevenue: number
-  newUsersThisWeek: number
   newListingsThisWeek: number
   listingsByStatus: Record<string, number>
   usersByRole: Record<string, number>
+
+  // ── Task 1: user statistics ──────────────────────────────────────────
+  totalTenants: number
+  totalManagers: number
+  totalAdmins: number
+  newUsersThisMonth: number
+  newUsersThisWeek: number
+  newUsersLastWeek: number
+  newTenantsThisMonth: number
+  newSellersThisMonth: number
+
+  // ── Task 2: revenue (canonical figures) ───────────────────────────────
+  netRevenue: number
+  totalRefunded: number
+  totalDeposits: number
+  pendingAmount: number
+  failedAmount: number
+  revenueCategories: RevenueCategory[]
+
+  // ── Task 2: revenue for the current calendar month ────────────────────
+  monthlyRevenue: number
+  monthlyNetRevenue: number
+  monthlyRefundCount: number
+  monthlyRevenueCount: number
+
+  // ── Task 3/5: reviews ─────────────────────────────────────────────────
+  websiteReviewCount: number
+  websiteReviewAverage: number
+  roomReviewCount: number
+  reviewActivity: ReviewActivityPoint[]
+}
+
+// A single point on the dashboard's review-activity chart.
+export type ReviewActivityPoint = {
+  label: string
+  key: string
+  count: number
+  average: number
+}
+
+// A revenue bucket used by the finance breakdown.
+export type RevenueCategory = {
+  category: string
+  label: string
+  total: number
+  count: number
+  isRevenue: boolean
+  percentage: number
+}
+
+// A point on the revenue chart.
+export type FinanceChartPoint = {
+  label: string
+  key: string
+  revenue: number
+  refunds: number
+  deposits: number
+  count: number
+}
+
+// A point on the user-growth chart.
+export type UserGrowthPoint = {
+  label: string
+  key: string
+  total: number
+  tenant: number
+  seller: number
+}
+
+// A review row in the admin review history (Task 5).
+// Covers BOTH website reviews and room (listing) reviews so the admin has a
+// single history view. The `transaction` field is what makes a review
+// traceable to the money that earned it (Task 6).
+export type AdminReviewItem = {
+  id: string
+  reviewType: 'website' | 'room'
+  reviewerId: string
+  reviewerName: string
+  reviewerInitials: string
+  reviewerRole?: string | null
+  score: number
+  title?: string | null
+  content: string
+  status: 'published' | 'hidden' | 'flagged'
+  hiddenReason?: string | null
+  adminReply?: string | null
+  createdAt: string
+  listing: {
+    id: string
+    title: string
+    image?: string
+    district?: string
+  } | null
+  transaction: {
+    id: string
+    amount: number
+    method?: string
+    description?: string
+    createdAt?: string
+  } | null
+}
+
+// The public aggregate for the platform rating (Task 3).
+export type WebsiteReviewSummary = {
+  average: number
+  totalReviews: number
+  distribution: Record<string, number>
+}
+
+// A published website review shown to the public.
+export type WebsiteReview = {
+  id: string
+  score: number
+  title?: string | null
+  content: string
+  createdAt: string
+  reviewerName?: string | null
+  reviewerInitials?: string | null
+  adminReply?: string | null
+  adminReplyAt?: string | null
+}
+
+// A transaction that qualifies the user to review the website.
+export type QualifyingTransaction = {
+  id: string
+  amount: number
+  method?: string
+  description?: string
+  createdAt: string
 }
 
 export type Transaction = {
@@ -1449,6 +1927,10 @@ export type Package = {
   days: number
   features: string[]
   popular?: boolean
+  /** Số tin đăng được phép mỗi tuần (backend: weeklyPosts) */
+  weeklyPosts?: number
+  /** Số lần đẩy VIP được tặng mỗi tuần (backend: vipBoosts) */
+  vipBoosts?: number
 }
 
 export type Wallet = {
@@ -1579,8 +2061,8 @@ export const paymentApi = {
     formData.append('proof', file)
     return api<{ success: boolean; order: any }>('/api/payment/upload-proof', {
       method: 'POST',
-      body: formData as any,
-    } as any)
+      body: formData,
+    })
   },
 
   getMySubscription: () =>

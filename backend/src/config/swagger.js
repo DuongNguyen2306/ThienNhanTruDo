@@ -5,8 +5,6 @@
 
 const swaggerJsdoc = require('swagger-jsdoc');
 
-const swaggerJsdoc = require('swagger-jsdoc');
-
 // Dynamic servers based on environment
 const isProduction = process.env.NODE_ENV === 'production';
 

@@ -3,13 +3,10 @@
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ArrowRight, BadgeCheck, Building2, CheckCircle2, Clock, Eye, EyeOff, Home, Lock, MapPin, Phone, ShieldCheck, User as UserIcon } from 'lucide-react'
+import { ArrowRight, BadgeCheck, CheckCircle2, Eye, EyeOff, Lock, Mail, MapPin, Phone, ShieldCheck, User as UserIcon } from 'lucide-react'
 import { BrutalHeader } from '@/components/brutal-header'
 import { useAuth } from '@/components/auth-provider'
 import { authApi, ApiError } from '@/lib/api'
-import { cn } from '@/lib/utils'
-
-type Purpose = 'tenant' | 'seller'
 
 const highlights = [
   { icon: ShieldCheck, label: 'Cam kết hoàn cọc 100%', detail: 'Nếu thông tin phòng khác thực tế' },
@@ -20,7 +17,6 @@ const highlights = [
 export default function RegisterPage() {
   const router = useRouter()
   const { login } = useAuth()
-  const [purpose, setPurpose] = useState<Purpose>('tenant')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -31,32 +27,36 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Seller-specific fields
-  const [idNumber, setIdNumber] = useState('')
-  const [brand, setBrand] = useState('')
-  const [address, setAddress] = useState('')
+  // ── Task 7: e-mail verification step ────────────────────────────────
+  const [stage, setStage] = useState<'form' | 'otp'>('form')
+  const [otp, setOtp] = useState('')
+  const [otpError, setOtpError] = useState('')
+  const [otpNotice, setOtpNotice] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendIn, setResendIn] = useState(0)
 
   useEffect(() => {
     document.body.style.overflow = 'auto'
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  const isSeller = purpose === 'seller'
+  // Resend cooldown countdown.
+  useEffect(() => {
+    if (resendIn <= 0) return
+    const t = setTimeout(() => setResendIn((s) => Math.max(0, s - 1)), 1000)
+    return () => clearTimeout(t)
+  }, [resendIn])
 
   const validateForm = () => {
     if (!fullName.trim()) return 'Vui lòng nhập họ tên'
     if (!phone.trim() || phone.replace(/\s/g, '').length < 9) return 'Số điện thoại không hợp lệ'
+    if (!email.trim()) return 'Vui lòng nhập email để nhận mã xác thực'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Email không hợp lệ'
     if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) {
       return 'Mật khẩu tối thiểu 8 ký tự, có chữ hoa và số'
     }
     if (password !== confirm) return 'Mật khẩu xác nhận không khớp'
-
-    // Seller-specific validation
-    if (isSeller) {
-      if (!idNumber.trim()) return 'Vui lòng nhập số CCCD'
-      if (idNumber.replace(/\s/g, '').length < 9) return 'Số CCCD không hợp lệ'
-      if (!address.trim()) return 'Vui lòng nhập địa chỉ thường trú'
-    }
 
     return null
   }
@@ -69,12 +69,46 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const { user: apiUser, token } = await authApi.register({
+      // The backend creates the account UNVERIFIED and emails a 6-digit OTP.
+      // No token is issued until the e-mail is proven.
+      await authApi.register({
         fullName: fullName.trim(),
         phone: phone.replace(/\s/g, ''),
-        email: email.trim() || undefined,
+        email: email.trim(),
         password,
-        role: purpose,
+      })
+
+      // Move to the OTP step. The code itself only ever arrives by e-mail.
+      setStage('otp')
+      setOtp('')
+      setOtpError('')
+      setOtpNotice('Mã xác thực đã được gửi tới email của bạn.')
+      setResendIn(60)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Đăng ký thất bại. Vui lòng thử lại.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Task 7: verify the e-mail OTP ───────────────────────────────────
+  const onVerifyOtp = async () => {
+    if (!/^\d{6}$/.test(otp)) {
+      setOtpError('Mã xác thực phải gồm đúng 6 chữ số.')
+      return
+    }
+
+    setOtpError('')
+    setOtpLoading(true)
+
+    try {
+      const { user: apiUser, token } = await authApi.verifyEmail({
+        email: email.trim(),
+        otp,
       })
 
       localStorage.setItem('token', token)
@@ -83,7 +117,7 @@ export default function RegisterPage() {
         id: apiUser.id,
         role: apiUser.role,
         fullName: apiUser.fullName,
-        name: apiUser.name,
+        name: apiUser.fullName,
         email: apiUser.email,
         phone: apiUser.phone,
         initials: apiUser.initials,
@@ -96,17 +130,35 @@ export default function RegisterPage() {
       }
 
       login(sessionUser)
-
-      // Redirect to login page with success message
-      router.push('/dang-nhap?registered=1')
+      router.push('/dang-nhap?verified=1')
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        setOtpError(err.message)
       } else {
-        setError('Đăng ký thất bại. Vui lòng thử lại.')
+        setOtpError('Xác thực thất bại. Vui lòng thử lại.')
       }
     } finally {
-      setLoading(false)
+      setOtpLoading(false)
+    }
+  }
+
+  // ── Resend the OTP (with client-side cooldown mirror) ────────────────
+  const onResend = async () => {
+    if (resendIn > 0) return
+    setResendLoading(true)
+    setOtpError('')
+    try {
+      const res = await authApi.resendVerification({ email: email.trim() })
+      setOtpNotice(res.message || 'Đã gửi lại mã xác thực.')
+      setResendIn(res.resendAvailableIn || 60)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setOtpError(err.message)
+      } else {
+        setOtpError('Không thể gửi lại mã. Vui lòng thử lại.')
+      }
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -127,63 +179,104 @@ export default function RegisterPage() {
                 className="text-2xl font-black text-[#151515] lg:text-3xl"
                 style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
               >
-                TẠO TÀI KHOẢN
+                {stage === 'otp' ? 'XÁC THỰC EMAIL' : 'TẠO TÀI KHOẢN'}
               </h1>
               <p className="mt-1 text-sm text-[#151515]/60">
-                Chọn vai trò và điền thông tin để bắt đầu.
+                {stage === 'otp'
+                  ? 'Nhập mã 6 chữ số được gửi tới email của bạn.'
+                  : 'Điền thông tin để tạo tài khoản người thuê.'}
               </p>
             </div>
 
             {/* Form Card */}
-            <div className="rounded-2xl border-[3px] border-[#151515] bg-[#F5F5F0] p-5 shadow-[5px_5px_0_#151515]">
+            <div className="rounded-2xl border-[3px] border-[#151515] bg-[#F5F5F0] p-6 shadow-[5px_5px_0_#151515]">
 
-              {/* Role Selection */}
-              <div className="mb-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPurpose('tenant')}
-                  className={cn(
-                    'flex items-start gap-3 rounded-xl border-[2px] p-3.5 transition-all',
-                    purpose === 'tenant'
-                      ? 'border-[#151515] bg-[#FDE047] shadow-[2px_2px_0_#151515]'
-                      : 'border-[#151515] bg-white shadow-[2px_2px_0_#151515] hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]'
-                  )}
-                >
-                  <span className={cn(
-                    'flex size-9 shrink-0 items-center justify-center rounded-lg',
-                    purpose === 'tenant' ? 'bg-white' : 'bg-[#F5F5F0]'
-                  )}>
-                    <Home className={cn('size-5', purpose === 'tenant' ? 'text-[#151515]' : 'text-[#151515]/60')} />
-                  </span>
-                  <span>
-                    <b className={cn('block text-sm', purpose === 'tenant' ? 'text-[#151515]' : 'text-[#151515]/70')}>Người thuê</b>
-                    <span className="mt-0.5 block text-xs text-[#151515]/50">Tìm và thuê phòng</span>
-                  </span>
-                </button>
+              {stage === 'otp' ? (
+                /* ── Task 7: e-mail verification step ────────────────────── */
+                <div className="space-y-4">
+                  <div className="flex items-start gap-2 rounded-xl border-[2px] border-[#FDE047] bg-[#FDE047]/20 p-3">
+                    <Mail className="mt-0.5 size-4 shrink-0 text-[#151515]" />
+                    <p className="text-sm font-medium text-[#151515]/75">
+                      Mã xác thực đã được gửi tới <b>{email.trim()}</b>. Mã có hiệu lực
+                      trong 10 phút và chỉ dùng được một lần.
+                    </p>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => setPurpose('seller')}
-                  className={cn(
-                    'flex items-start gap-3 rounded-xl border-[2px] p-3.5 transition-all',
-                    purpose === 'seller'
-                      ? 'border-[#151515] bg-[#FDE047] shadow-[2px_2px_0_#151515]'
-                      : 'border-[#151515] bg-white shadow-[2px_2px_0_#151515] hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]'
-                  )}
-                >
-                  <span className={cn(
-                    'flex size-9 shrink-0 items-center justify-center rounded-lg',
-                    purpose === 'seller' ? 'bg-white' : 'bg-[#F5F5F0]'
-                  )}>
-                    <Building2 className={cn('size-5', purpose === 'seller' ? 'text-[#151515]' : 'text-[#151515]/60')} />
-                  </span>
-                  <span>
-                    <b className={cn('block text-sm', purpose === 'seller' ? 'text-[#151515]' : 'text-[#151515]/70')}>Chủ đăng tin</b>
-                    <span className="mt-0.5 block text-xs text-[#151515]/50">Đăng và quản lý phòng</span>
-                  </span>
-                </button>
-              </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-[#151515]">
+                      Mã xác thực
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      onKeyDown={(e) => e.key === 'Enter' && onVerifyOtp()}
+                      placeholder="000000"
+                      className="h-14 w-full rounded-xl border-[2px] border-[#151515] bg-white px-4 text-center font-mono text-2xl font-black tracking-[0.5em] text-[#151515] shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
+                    />
+                  </div>
 
+                  {otpNotice ? (
+                    <p className="text-sm font-medium text-emerald-700">{otpNotice}</p>
+                  ) : null}
+
+                  {otpError ? (
+                    <div className="flex items-start gap-2 rounded-xl border-[2px] border-red-500 bg-red-50 p-3">
+                      <span className="text-sm text-red-500">⚠️</span>
+                      <p className="text-sm font-medium text-red-600">{otpError}</p>
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={onVerifyOtp}
+                    disabled={otpLoading || otp.length !== 6}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#FDE047] text-base font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {otpLoading ? (
+                      <>
+                        <span className="size-4 animate-spin rounded-full border-2 border-[#151515] border-t-transparent" />
+                        Đang xác thực...
+                      </>
+                    ) : (
+                      <>
+                        Xác thực &amp; hoàn tất
+                        <ArrowRight className="size-5" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStage('form')
+                        setOtp('')
+                        setOtpError('')
+                      }}
+                      className="font-bold text-[#151515]/60 hover:text-[#151515]"
+                    >
+                      ← Quay lại
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onResend}
+                      disabled={resendIn > 0 || resendLoading}
+                      className="font-bold text-[#059669] disabled:cursor-not-allowed disabled:text-[#151515]/35 disabled:no-underline hover:underline"
+                    >
+                      {resendIn > 0
+                        ? `Gửi lại sau ${resendIn}s`
+                        : resendLoading
+                          ? 'Đang gửi...'
+                          : 'Gửi lại mã'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
               {/* Form Fields */}
               <div className="grid gap-4">
 
@@ -224,7 +317,7 @@ export default function RegisterPage() {
                 {/* Email */}
                 <div>
                   <label className="mb-1.5 block text-sm font-bold text-[#151515]">
-                    Email <span className="font-normal text-[#151515]/50">(tuỳ chọn)</span>
+                    Email <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <svg className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -292,76 +385,6 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                {/* Seller-specific fields */}
-                {isSeller && (
-                  <div className="mt-2 grid gap-4 rounded-xl border-[2px] border-[#151515]/30 bg-[#151515]/5 p-4">
-                    <div className="flex items-center gap-2 text-sm font-bold text-[#151515]">
-                      <Building2 className="size-4" />
-                      Thông tin chủ đăng tin
-                    </div>
-
-                    {/* CCCD */}
-                    <div>
-                      <label className="mb-1.5 block text-sm font-bold text-[#151515]">
-                        CCCD <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <UserIcon className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
-                        <input
-                          type="text"
-                          value={idNumber}
-                          onChange={(e) => setIdNumber(e.target.value)}
-                          className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
-                          placeholder="VD: 079123456789"
-                          maxLength={12}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tên thương hiệu */}
-                    <div>
-                      <label className="mb-1.5 block text-sm font-bold text-[#151515]">
-                        Tên thương hiệu <span className="font-normal text-[#151515]/50">(tuỳ chọn)</span>
-                      </label>
-                      <div className="relative">
-                        <Building2 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
-                        <input
-                          type="text"
-                          value={brand}
-                          onChange={(e) => setBrand(e.target.value)}
-                          className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
-                          placeholder="VD: Nhà trọ Bình An"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Địa chỉ */}
-                    <div>
-                      <label className="mb-1.5 block text-sm font-bold text-[#151515]">
-                        Địa chỉ thường trú <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <MapPin className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
-                        <input
-                          type="text"
-                          value={address}
-                          onChange={(e) => setAddress(e.target.value)}
-                          className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
-                          placeholder="VD: 123 Nguyễn Trãi, Q1, TP.HCM"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Note */}
-                    <div className="flex items-start gap-2 rounded-lg border border-[#151515]/20 bg-white p-3">
-                      <Clock className="mt-0.5 size-4 shrink-0 text-[#151515]/50" />
-                      <p className="text-xs text-[#151515]/60">
-                        Tài khoản chủ đăng tin cần được Manager duyệt trước khi đăng tin. Thời gian duyệt: 24-48 giờ.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
                 {/* Error Message */}
                 {error && (
                   <div className="flex items-start gap-2 rounded-xl border-[2px] border-red-500 bg-red-50 p-3">
@@ -398,12 +421,14 @@ export default function RegisterPage() {
                   </Link>
                 </p>
               </div>
+                </>
+              )}
             </div>
 
             {/* Footer Note */}
             <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-[#151515]/50">
               <ShieldCheck className="size-3.5 text-[#059669]" />
-              THIÊN NHÃN TRÚ ĐỒ xác thực SĐT để chống tài khoản ảo.
+              THIÊN NHÃN TRÚ ĐỒ xác thực email để chống tài khoản ảo.
             </p>
           </div>
         </div>

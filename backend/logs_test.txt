@@ -1,0 +1,12 @@
+
+╔═══════════════════════════════════════════════════╗
+║                                                   ║
+║   🚀 Thiên Nhãn Backend Server                   ║
+║                                                   ║
+║   Server: http://localhost:3105                   ║
+║   Environment: development                    ║
+║   Database: MongoDB Atlas (thiennhan_db)       ║
+║   Email: smtp (configured)      ║
+║                                                   ║
+╚═══════════════════════════════════════════════════╝
+  

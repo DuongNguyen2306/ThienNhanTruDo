@@ -10,8 +10,8 @@
   },
   "servers": [
     {
-      "url": "http://localhost:3005",
-      "description": "Development Server"
+"url": "https://thiennhantrudo-be.onrender.com",
+        "description": "Production Server"
     }
   ],
   "components": {
@@ -159,8 +159,7 @@
                   "phone": { "type": "string", "example": "0903123456", "description": "SĐT Việt Nam" },
                   "password": { "type": "string", "example": "Matkhau123", "minLength": 6 },
                   "fullName": { "type": "string", "example": "Nguyễn Văn A" },
-                  "email": { "type": "string", "example": "email@example.com" },
-                  "role": { "type": "string", "enum": ["tenant", "seller"], "default": "tenant" }
+                  "email": { "type": "string", "example": "email@example.com" }
                 }
               }
             }
@@ -190,8 +189,8 @@
     },
     "/api/auth/login": {
       "post": {
-        "summary": "Đăng nhập bằng SĐT + Mật khẩu",
-        "description": "Xác thực và nhận JWT token. Token có thời hạn 7 ngày.",
+        "summary": "Đăng nhập bằng SĐT hoặc Email + Mật khẩu",
+        "description": "Xác thực và nhận JWT token. Token có thời hạn 7 ngày. Định danh đăng nhập có thể là số điện thoại HOẶC email đã đăng ký. Email được chuẩn hoá (trim + lowercase) trước khi tra cứu. `phone` vẫn được chấp nhận để tương thích ngược với client cũ.",
         "tags": ["Auth"],
         "security": [],
         "requestBody": {
@@ -200,14 +199,15 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["phone", "password"],
+                "required": ["password"],
                 "properties": {
-                  "phone": { "type": "string", "example": "0903000001", "description": "Số điện thoại đã đăng ký" },
+                  "identifier": { "type": "string", "example": "0903000001", "description": "Số điện thoại HOẶC email đã đăng ký" },
+                  "phone": { "type": "string", "example": "0903000001", "description": "Trường cũ, vẫn được hỗ trợ (tương thích ngược)" },
                   "password": { "type": "string", "example": "123456", "description": "Mật khẩu" }
                 }
               },
               "example": {
-                "phone": "0903000001",
+                "identifier": "vuthanhha@email.com",
                 "password": "123456"
               }
             }
@@ -254,7 +254,8 @@
             }
           },
           "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "401": { "description": "SĐT hoặc mật khẩu không đúng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Số điện thoại/email hoặc mật khẩu không chính xác", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Email chưa được xác thực — cần xác thực OTP trước khi đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "429": { "description": "Quá nhiều lần đăng nhập, vui lòng chờ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
@@ -433,6 +434,77 @@
         }
       }
     },
+    "/api/auth/verify-email-change": {
+      "post": {
+        "summary": "Xác nhận thay đổi email bằng OTP",
+        "description": "Hoàn tất việc đổi email. Mã OTP được gửi tới ĐỊA CHỈ MỚI; email trên hồ sơ chỉ được cập nhật sau khi mã được xác thực thành công.",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "otp"],
+                "properties": {
+                  "email": { "type": "string", "example": "newemail@example.com" },
+                  "otp": { "type": "string", "example": "123456" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Đã cập nhật email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "requiresEmailConfirmation": { "type": "boolean" },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Mã không hợp lệ / hết hạn", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Chưa đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Email đã được dùng hoặc yêu cầu không còn hợp lệ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/resend-email-change": {
+      "post": {
+        "summary": "Gửi lại mã xác thực thay đổi email",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Đã gửi lại mã",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "pendingEmail": { "type": "string" },
+                    "resendAvailableIn": { "type": "number" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Không có yêu cầu đổi email đang chờ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Chưa đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Quá nhiều lần gửi", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Không gửi được email", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
     "/api/auth/password": {
       "put": {
         "summary": "Đổi mật khẩu",
@@ -456,6 +528,91 @@
         "responses": {
           "200": { "description": "Đổi mật khẩu thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
           "401": { "description": "Mật khẩu hiện tại không đúng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "summary": "Gửi OTP đặt lại mật khẩu (theo email)",
+        "description": "Bắt đầu luồng quên mật khẩu. Người dùng nhập EMAIL đã đăng ký. Phản hồi LUÔN LUÔN giống nhau ('Nếu email đã được đăng ký, chúng tôi sẽ gửi mã xác thực tới địa chỉ này.') cho cả địa chỉ tồn tại lẫn không tồn tại, nên không thể dò tài khoản.",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "example@gmail.com" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Đã xử lý yêu cầu (thông báo chung, không tiết lộ tài khoản)", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "sent": { "type": "boolean" }, "resendAvailableIn": { "type": "number" } } } } } },
+          "400": { "description": "Email không hợp lệ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Quá nhiều yêu cầu / còn trong thời gian chờ gửi lại", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Không gửi được email", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "summary": "Đặt lại mật khẩu bằng OTP",
+        "description": "Dùng OTP gửi qua email để đặt mật khẩu mới. Sau khi thành công, mọi phiên đăng nhập cũ bị vô hiệu hoá.",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "otp", "newPassword"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "example@gmail.com" },
+                  "otp": { "type": "string", "example": "123456" },
+                  "newPassword": { "type": "string", "minLength": 8, "example": "NewPass@123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Đặt lại mật khẩu thành công", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "sessionsInvalidated": { "type": "boolean" } } } } } },
+          "400": { "description": "Email/OTP không hợp lệ, hết hạn hoặc đã dùng", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Quá nhiều yêu cầu", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/auth/resend-password-reset": {
+      "post": {
+        "summary": "Gửi lại OTP đặt lại mật khẩu",
+        "description": "Gửi lại OTP tới email đã nhập. Có cooldown và giới hạn tần suất. Phản hồi chung, không tiết lộ tài khoản.",
+        "tags": ["Auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "example@gmail.com" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Đã xử lý yêu cầu (thông báo chung)", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "sent": { "type": "boolean" }, "resendAvailableIn": { "type": "number" } } } } } },
+          "400": { "description": "Email không hợp lệ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Quá nhiều yêu cầu / còn trong thời gian chờ", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Không gửi được email", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },

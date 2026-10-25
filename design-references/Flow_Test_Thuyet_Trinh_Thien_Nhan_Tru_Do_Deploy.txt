@@ -1,0 +1,272 @@
+HƯỚNG DẪN TEST WEBSITE THIÊN NHÃN TRÚ ĐỒ – KỊCH BẢN THUYẾT TRÌNH CHO GIÁO VIÊN
+
+Tk: 0903000002          (Manager)
+TK:0987123456            (Người thuê)
+TK:0794442282             (Admin)
+TK : 0994123456         (Seller)
+
+MK: duongHsvt123
+
+
+
+
+Website chính: https://thien-nhan-tru-do-kappa.vercel.app/ Trang tìm
+kiếm: https://thien-nhan-tru-do-kappa.vercel.app/tim-kiem Trang đăng
+nhập: https://thien-nhan-tru-do-kappa.vercel.app/dang-nhap Trang đăng
+ký: https://thien-nhan-tru-do-kappa.vercel.app/dang-ky Tin đã lưu:
+https://thien-nhan-tru-do-kappa.vercel.app/tai-khoan/da-luu
+
+MỤC ĐÍCH: Vừa thao tác trên website vừa nói cho giáo viên hiểu chức năng
+đang chạy. CÁCH ĐỌC: Mỗi phần có THAO TÁC – KẾT QUẢ CẦN THẤY – LỜI
+THUYẾT TRÌNH. LƯU Ý: Đây là kịch bản kiểm thử theo tài liệu cung cấp;
+không khẳng định chức năng đã chạy thành công trên bản deploy khi chưa
+tự kiểm tra. Tên menu có thể hơi khác; hãy dùng đúng tên đang hiện trên
+website.
+
+PHẦN 0. CHUẨN BỊ TRƯỚC BUỔI THUYẾT TRÌNH (5–10 PHÚT)
+
+1.  Kết nối Internet, mở Google Chrome và truy cập website chính phía
+    trên.
+2.  Kiểm tra trang chủ, trang tìm kiếm và hình ảnh phòng có tải được.
+3.  Chuẩn bị tài khoản người thuê (TENANT) có thể đăng nhập. KHÔNG đọc
+    mật khẩu trước lớp.
+4.  Chuẩn bị ít nhất một phòng đã xác minh, một phòng trống ngay, một
+    phòng VIP và một phòng vừa xác minh vừa trống.
+5.  Để demo đánh giá, chuẩn bị tài khoản người thuê có lịch hẹn đã
+    xem/hoàn thành (hoặc điều kiện đã thuê theo quy tắc hệ thống) và
+    phòng đủ điều kiện nhận đánh giá.
+6.  Ghi trước tên phòng sẽ demo và mở sẵn trang tìm kiếm ở tab thứ hai.
+7.  Nếu định test đăng ký, chuẩn bị email thử nghiệm chưa sử dụng và số
+    điện thoại thử nghiệm hợp lệ; không dùng dữ liệu cá nhân thật không
+    cần thiết.
+8.  Không tạo đánh giá giả cho phòng thật; chỉ gửi nội dung thử nghiệm
+    trong môi trường/tài khoản được phép kiểm thử.
+9.  Không cần chạy Terminal, npm run dev hoặc localhost. Frontend đã
+    triển khai trên Vercel; backend đã được triển khai riêng.
+
+
+
+PHẦN 1. TÌM KIẾM VÀ LỌC PHÒNG (3–4 PHÚT)
+
+1.1 MỞ TRANG TÌM KIẾM THAO TÁC: - Từ trang chủ, bấm “Tìm phòng” hoặc
+“Tìm kiếm”. - Nếu cần, mở thẳng
+https://thien-nhan-tru-do-kappa.vercel.app/tim-kiem - Chỉ vào một thẻ
+phòng: hình ảnh, giá thuê, diện tích, địa chỉ. KẾT QUẢ CẦN THẤY: Danh
+sách phòng hiện ra, có ảnh và thông tin cơ bản. LỜI NÓI: “Đầu tiên em
+vào trang tìm kiếm. Mỗi phòng được trình bày thành một thẻ, có hình ảnh,
+giá thuê và vị trí. Người thuê có thể xem nhiều phòng trước khi chọn một
+phòng phù hợp.”
+
+1.2 LỌC “ĐÃ XÁC MINH” THAO TÁC: - Tìm ô “Đã xác minh” trên bộ lọc. - Bấm
+bật, chờ danh sách cập nhật. - Chỉ vào badge “Đã xác minh” màu vàng trên
+một kết quả. - Bấm tắt để bỏ điều kiện này. KẾT QUẢ CẦN THẤY: Khi bật
+chỉ còn các tin đã xác minh; khi tắt, danh sách không còn bị giới hạn
+bởi điều kiện xác minh. Nếu không có tin phù hợp, phải có trạng thái
+không có kết quả. LỜI NÓI: “Nếu em muốn ưu tiên những phòng đã được hệ
+thống kiểm tra thông tin, em bật mục Đã xác minh. Các phòng không đáp
+ứng điều kiện sẽ không nằm trong kết quả. Khi tắt đi, hệ thống bỏ điều
+kiện này.”
+
+1.3 LỌC “TRỐNG NGAY” THAO TÁC: - Đảm bảo đã tắt bộ lọc Đã xác minh. -
+Bật “Trống ngay”, kiểm tra trạng thái các phòng. - Tắt bộ lọc. KẾT QUẢ
+CẦN THẤY: Khi bật chỉ hiện phòng có thể thuê ngay. Khi tắt, phòng đã cho
+thuê cũng có thể hiện nếu dữ liệu và các bộ lọc còn lại cho phép. LỜI
+NÓI: “Nếu em cần tìm phòng để chuyển vào ở sớm, em bật Trống ngay. Hệ
+thống sẽ chỉ hiển thị những phòng đang sẵn sàng cho thuê.”
+
+1.4 KẾT HỢP HAI BỘ LỌC THAO TÁC: - Bật cùng lúc “Đã xác minh” và “Trống
+ngay”. - Chỉ vào một phòng vừa có badge xác minh vừa có trạng thái
+trống. - Tắt hai bộ lọc sau khi trình bày. KẾT QUẢ CẦN THẤY: Chỉ còn
+phòng thỏa mãn CẢ HAI điều kiện. LỜI NÓI: “Em cũng có thể kết hợp hai
+điều kiện. Ví dụ, em muốn phòng vừa được xác minh vừa đang trống. Hệ
+thống sẽ lọc đúng những phòng đáp ứng đồng thời cả hai yêu cầu.”
+
+1.5 KIỂM TRA LỖI NẾU GIÁO VIÊN YÊU CẦU THAO TÁC: - Nhấn F12, mở mục
+Console, thử bật/tắt bộ lọc. - Kiểm tra không có lỗi JavaScript hoặc lỗi
+gọi API liên quan đến thao tác. LỜI NÓI: “Ngoài việc xem kết quả trên
+màn hình, em có thể kiểm tra thêm xem thao tác lọc có gây lỗi trong
+trình duyệt hay không.” GHI CHÚ: Không phải mọi dòng màu đỏ đều là lỗi
+của bộ lọc; đọc nội dung lỗi trước khi kết luận.
+
+PHẦN 2. XEM CHI TIẾT PHÒNG VÀ BADGE (2 PHÚT)
+
+2.1 XEM THÔNG TIN PHÒNG THAO TÁC: - Từ trang tìm kiếm, bấm vào một
+phòng. - Cuộn chậm qua hình ảnh, giá thuê, diện tích, địa chỉ, mô tả,
+tiện ích và thông tin liên hệ (nếu hiển thị). KẾT QUẢ CẦN THẤY: Trang
+chi tiết đúng phòng vừa chọn; ảnh và thông tin tải đầy đủ. LỜI NÓI: “Khi
+quan tâm một phòng, em bấm vào để xem kỹ hơn. Ở đây người thuê xem được
+ảnh, giá, diện tích, địa chỉ và các tiện ích trước khi quyết định liên
+hệ.”
+
+2.2 BADGE VIP THAO TÁC: - Mở một phòng VIP còn hiệu lực đã chuẩn bị. -
+Chỉ vào badge VIP. KẾT QUẢ CẦN THẤY: Badge VIP màu xanh lá, có viền đen;
+không phải màu hồng. LỜI NÓI: “Badge VIP màu xanh giúp người dùng nhận
+ra tin đang được ưu tiên hiển thị. Đây là dấu hiệu về mức độ nổi bật của
+tin đăng.”
+
+2.3 BADGE ĐÃ XÁC MINH THAO TÁC: - Mở một phòng đã xác minh, chỉ vào
+badge vàng và biểu tượng xác minh. KẾT QUẢ CẦN THẤY: Badge vàng, biểu
+tượng phù hợp. LỜI NÓI: “Badge Đã xác minh màu vàng cho biết tin đã qua
+bước kiểm tra thông tin. VIP và Đã xác minh là hai trạng thái khác
+nhau.”
+
+PHẦN 3. LƯU TIN YÊU THÍCH (2–3 PHÚT)
+
+3.1 THỬ KHI CHƯA ĐĂNG NHẬP THAO TÁC: - Đăng xuất nếu đang đăng nhập. -
+Mở một phòng và bấm biểu tượng trái tim. KẾT QUẢ CẦN THẤY: Hiện yêu cầu
+đăng nhập, ví dụ “Vui lòng đăng nhập để lưu tin!”. LỜI NÓI: “Em thử lưu
+phòng khi chưa đăng nhập. Hệ thống yêu cầu đăng nhập để biết phòng đã
+lưu thuộc về tài khoản nào.”
+
+3.2 ĐĂNG NHẬP VÀ LƯU THAO TÁC: - Bấm Đăng nhập hoặc vào
+https://thien-nhan-tru-do-kappa.vercel.app/dang-nhap - Nhập tài khoản
+TENANT đã chuẩn bị và bấm Đăng nhập. - Quay lại phòng lúc nãy. - Bấm
+trái tim một lần. KẾT QUẢ CẦN THẤY: Đăng nhập thành công, trái tim
+chuyển sang màu đỏ, có thể có hiệu ứng nhấn. LỜI NÓI: “Sau khi đăng
+nhập, em bấm trái tim để lưu phòng. Khi biểu tượng đổi sang màu đỏ,
+người dùng biết phòng đã được đánh dấu yêu thích.”
+
+3.3 XEM TIN ĐÃ LƯU THAO TÁC: - Vào mục Tài khoản → Đã lưu hoặc
+https://thien-nhan-tru-do-kappa.vercel.app/tai-khoan/da-luu - Tìm phòng
+vừa lưu; bấm vào phòng để mở lại. KẾT QUẢ CẦN THẤY: Phòng xuất hiện với
+hình ảnh, tên, giá và địa chỉ. LỜI NÓI: “Phòng em vừa lưu được đưa vào
+danh sách này. Nhờ đó, lần sau em có thể xem lại mà không phải tìm kiếm
+từ đầu.”
+
+3.4 BỎ LƯU THAO TÁC: - Bấm trái tim ở phòng đang lưu (trên trang chi
+tiết hoặc danh sách đã lưu nếu có nút). - Quay lại danh sách đã lưu,
+kiểm tra kết quả. KẾT QUẢ CẦN THẤY: Trái tim về trạng thái chưa lưu,
+phòng không còn trong danh sách. LỜI NÓI: “Nếu không còn quan tâm, em có
+thể bấm lại trái tim để bỏ lưu. Danh sách được cập nhật theo lựa chọn
+của người dùng.”
+
+PHẦN 4. ĐÁNH GIÁ PHÒNG – LUỒNG CẦN CHUẨN BỊ KỸ (3–4 PHÚT)
+
+QUY TẮC THEO TÀI LIỆU TEST: - Người thuê phải có lịch hẹn xem phòng đã
+hoàn thành/đã xem, HOẶC từng thuê phòng nếu hệ thống hỗ trợ điều kiện
+này. - Không cho gửi đánh giá khi không đủ điều kiện. - Cần kiểm tra quy
+tắc ngăn đánh giá trùng của cùng người cho cùng phòng. - Điểm trung bình
+có thể là số thập phân, ví dụ 4,5 sao; không nên yêu cầu mọi đánh giá
+đều là sao nguyên ở phần điểm trung bình. CHÚ Ý: Chỉ khẳng định những
+quy tắc này đã được thực thi khi tự kiểm tra bản deploy.
+
+4.1 MỞ LỊCH HẸN THAO TÁC: - Đăng nhập TENANT đã chuẩn bị. - Mở Tài khoản
+→ Lịch hẹn (theo menu thực tế). - Tìm một lịch hẹn có trạng thái “Đã
+xem” hoặc “Hoàn thành”. KẾT QUẢ CẦN THẤY: Có lịch hẹn phù hợp để thử
+chức năng đánh giá. LỜI NÓI: “Để phần đánh giá có cơ sở, hệ thống được
+thiết kế cho phép người thuê đánh giá khi đã đáp ứng điều kiện, ví dụ đã
+hoàn thành lịch xem phòng. Em sẽ chọn một lịch hẹn đủ điều kiện.”
+
+4.2 NHẤN NÚT ĐÁNH GIÁ THAO TÁC: - Tại lịch hẹn đủ điều kiện, tìm và bấm
+“Đánh giá”. - Nếu nút không xuất hiện, kiểm tra trạng thái lịch hẹn và
+quyền tài khoản, không tự nhận đã hoạt động. KẾT QUẢ CẦN THẤY: Mở biểu
+mẫu đánh giá hoặc chuyển đến khu vực đánh giá. LỜI NÓI: “Sau khi chọn
+lịch hẹn phù hợp, em bấm Đánh giá để ghi lại trải nghiệm của mình.”
+
+4.3 CHỌN SỐ SAO VÀ VIẾT NHẬN XÉT THAO TÁC: - Chọn 4 trong 5 sao. - Nhập
+nhận xét THỬ NGHIỆM vào phòng thử nghiệm, ví dụ: “Thông tin phòng rõ
+ràng, hình ảnh dễ xem. Mình muốn xem trực tiếp để kiểm tra thêm.” - Kiểm
+tra xem hệ thống có yêu cầu nội dung tối thiểu hay không. KẾT QUẢ CẦN
+THẤY: 4 sao được chọn, nhận xét nằm trong ô nhập. LỜI NÓI: “Em chọn số
+sao để thể hiện mức độ hài lòng, sau đó viết thêm nhận xét. Phần chữ
+giúp người khác hiểu lý do em đánh giá như vậy.”
+
+4.4 GỬI ĐÁNH GIÁ THAO TÁC: - Chỉ bấm “Gửi đánh giá” nếu đây là tài
+khoản/phòng thử nghiệm được phép. - Quan sát thông báo thành công, chờ
+duyệt hoặc lỗi. - Không nhấn gửi liên tục khi đang chờ phản hồi. KẾT QUẢ
+CẦN THẤY: Hệ thống ghi nhận đánh giá đúng trạng thái. LỜI NÓI NẾU THÀNH
+CÔNG: “Sau khi gửi, hệ thống đã tiếp nhận đánh giá. Em sẽ mở trang chi
+tiết để kiểm tra đánh giá có xuất hiện hay đang chờ xử lý.” LỜI NÓI NẾU
+BỊ CHẶN: “Tài khoản hiện chưa đáp ứng điều kiện gửi đánh giá nên hệ
+thống không cho gửi. Đây là trường hợp cần kiểm tra khi thử chức năng.”
+
+4.5 XEM ĐÁNH GIÁ TRÊN TRANG PHÒNG THAO TÁC: - Quay về trang chi tiết của
+phòng được đánh giá. - Cuộn đến mục Đánh giá. - Kiểm tra tên/hình đại
+diện nếu có, số sao, nội dung, ngày đánh giá và điểm trung bình. - Tải
+lại trang để kiểm tra dữ liệu có được lưu. KẾT QUẢ CẦN THẤY: Nhận xét
+được hiển thị nếu được công khai; nếu chờ duyệt thì cần có trạng thái
+phù hợp. LỜI NÓI: “Ở trang chi tiết, người tìm phòng có thể tham khảo
+những đánh giá được phép hiển thị. Hệ thống có thể tổng hợp các mức sao
+thành điểm trung bình để người dùng dễ theo dõi.”
+
+4.6 KIỂM TRA TRƯỜNG HỢP KHÔNG HỢP LỆ (KHÔNG CẦN THAO TÁC LÂU) - Tài
+khoản chưa có lịch hẹn hợp lệ: không được gửi nếu đó là quy tắc hệ
+thống. - Tài khoản đã đánh giá phòng: thử xem hệ thống có ngăn gửi lần
+hai hay không. - Điểm trung bình có thể hiển thị số lẻ, ví dụ 4,5. LỜI
+NÓI: “Ngoài trường hợp thành công, em còn kiểm tra trường hợp không đủ
+điều kiện và đánh giá trùng, để hạn chế việc gửi nhận xét không hợp lệ.”
+
+PHẦN 5. ĐĂNG KÝ, ĐĂNG NHẬP, ĐĂNG XUẤT (2–3 PHÚT)
+
+5.1 ĐĂNG KÝ THAO TÁC: - Bấm Đăng ký hoặc mở
+https://thien-nhan-tru-do-kappa.vercel.app/dang-ky - Nhập họ tên, email
+chưa dùng, số điện thoại thử nghiệm hợp lệ, mật khẩu thử nghiệm đủ yêu
+cầu. - Bấm Đăng ký; nếu có OTP/xác minh, làm theo bước thực tế trên màn
+hình. KẾT QUẢ CẦN THẤY: Đăng ký thành công hoặc hướng dẫn xác minh;
+KHÔNG mặc định sẽ tự đăng nhập nếu giao diện không làm vậy. LỜI NÓI:
+“Người dùng mới có thể tạo tài khoản bằng cách nhập những thông tin cần
+thiết. Sau khi gửi, hệ thống kiểm tra dữ liệu và thực hiện bước xác minh
+nếu có.”
+
+5.2 ĐĂNG NHẬP THAO TÁC: - Mở trang Đăng nhập. - Nhập tài khoản thử
+nghiệm, bấm Đăng nhập. - Kiểm tra tên hoặc menu tài khoản trên thanh
+điều hướng. KẾT QUẢ CẦN THẤY: Đăng nhập thành công, giao diện nhận biết
+người dùng. LỜI NÓI: “Sau khi đăng nhập, người thuê có thể sử dụng các
+chức năng riêng của tài khoản như lưu tin và xem lịch hẹn.”
+
+5.3 ĐĂNG XUẤT THAO TÁC: - Mở menu tài khoản, chọn Đăng xuất. - Kiểm tra
+giao diện trở về trạng thái khách. KẾT QUẢ CẦN THẤY: Phiên đăng nhập kết
+thúc; chức năng cần đăng nhập sẽ yêu cầu xác thực lại. LỜI NÓI: “Khi
+không còn sử dụng, người dùng có thể đăng xuất để bảo vệ tài khoản của
+mình.”
+
+PHẦN 6. NHỮNG LỖI ĐÃ ĐƯỢC ĐỀ CẬP TRONG TÀI LIỆU (NẾU GIÁO VIÊN HỎI)
+
+1.  Lọc Trống ngay: trước đây backend mặc định bật điều kiện; hướng sửa
+    là chỉ lọc khi người dùng chọn.
+2.  Lọc Đã xác minh: bổ sung nhận tham số verified từ yêu cầu tìm kiếm.
+3.  Dữ liệu đúng/sai: backend xử lý giá trị “true” gửi qua đường dẫn
+    truy vấn thành kiểu đúng/sai.
+4.  Badge VIP: đổi từ màu hồng sang xanh lá theo thiết kế.
+5.  Lưu tin: bổ sung nút trái tim và chức năng lưu/bỏ lưu trên trang chi
+    tiết. LỜI NÓI: “Trong quá trình phát triển, nhóm có kiểm tra và điều
+    chỉnh một số điểm như bộ lọc, màu badge VIP và thao tác lưu tin. Em
+    sẽ minh họa kết quả trực tiếp thay vì chỉ mô tả bằng lời.” CHÚ Ý:
+    Nếu chức năng trên bản deploy chưa đúng, nói rõ còn vấn đề; không
+    khẳng định đã sửa hoàn toàn.
+
+PHẦN 7. KẾT THÚC BÀI THUYẾT TRÌNH (30–45 GIÂY)
+
+“Như vậy, em đã trình bày các chức năng chính dành cho người tìm phòng:
+tìm kiếm, lọc theo nhu cầu, xem chi tiết, lưu tin, đăng ký và đăng nhập.
+Em cũng đã giới thiệu quy trình đánh giá phòng khi người dùng đáp ứng
+điều kiện của hệ thống. Mục tiêu của THIÊN NHÃN TRÚ ĐỒ là giúp việc tìm
+phòng dễ dàng và rõ ràng hơn. Em xin cảm ơn thầy cô đã theo dõi và sẵn
+sàng trả lời câu hỏi.”
+
+CHECKLIST TRƯỚC KHI ĐỨNG THUYẾT TRÌNH
+
+[ ] Website Vercel mở được, dữ liệu phòng tải được [ ] Bật/tắt Đã xác
+minh hoạt động đúng [ ] Bật/tắt Trống ngay hoạt động đúng [ ] Kết hợp
+hai bộ lọc cho kết quả đúng [ ] Trang chi tiết hiển thị ảnh, giá, diện
+tích, địa chỉ [ ] Badge VIP xanh lá, badge xác minh vàng [ ] Chưa đăng
+nhập nhấn tim bị yêu cầu đăng nhập [ ] Đăng nhập TENANT thành công [ ]
+Lưu tin thành công, trái tim đỏ [ ] Tin xuất hiện trong danh sách đã lưu
+[ ] Bỏ lưu làm tin biến mất khỏi danh sách [ ] Có lịch hẹn đủ điều kiện
+để demo đánh giá [ ] Nút Đánh giá mở được (nếu chức năng đã triển khai)
+[ ] Chọn sao, nhập nhận xét và gửi trên dữ liệu thử nghiệm [ ] Kiểm tra
+đánh giá hiển thị hoặc chờ duyệt đúng quy trình [ ] Đăng ký/đăng
+nhập/đăng xuất hoạt động
+
+Ghi kết quả: PASS = đạt; FAIL = lỗi; BLOCKED = không thể thử do thiếu
+quyền/dữ liệu.
+
+NẾU GẶP LỖI KHI DEMO
+
+-   Chờ vài giây rồi tải lại một lần.
+-   Nếu vẫn lỗi, nói: “Phần này hiện chưa phản hồi như mong đợi, em xin
+    ghi nhận và chuyển sang chức năng tiếp theo.”
+-   Không bấm gửi đánh giá hoặc giao dịch liên tục.
+-   Dùng phòng và tài khoản dự phòng đã chuẩn bị.
+
+HẾT FILE.

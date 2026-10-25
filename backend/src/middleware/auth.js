@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
+const otpHelper = require('../helpers/otpHelper');
 
 const ROLES = {
   TENANT: 'tenant',
@@ -17,6 +18,20 @@ const authenticate = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, config.jwt.secret);
+
+    // ── Session invalidation (Task 7) ────────────────────────────────────
+    // The token carries the session epoch that was current when it was
+    // issued. If the user's epoch has since been rotated (password change or
+    // password reset), every previously issued token is rejected.
+    // Tokens minted before this feature existed carry no epoch and are
+    // accepted, so enabling this does not log existing users out.
+    const epochValid = await otpHelper.verifySessionEpoch(decoded.id, decoded.epoch);
+    if (!epochValid) {
+      return res.status(401).json({
+        error: 'Phiên đăng nhập đã hết hiệu lực. Vui lòng đăng nhập lại.',
+        code: 'SESSION_INVALIDATED',
+      });
+    }
 
     req.user = decoded;
     next();
@@ -46,7 +61,10 @@ const optionalAuth = async (req, res, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       const decoded = jwt.verify(token, config.jwt.secret);
-      req.user = decoded;
+      const epochValid = await otpHelper.verifySessionEpoch(decoded.id, decoded.epoch);
+      if (epochValid) {
+        req.user = decoded;
+      }
     }
   } catch (error) {
     // Ignore errors - user just won't be authenticated

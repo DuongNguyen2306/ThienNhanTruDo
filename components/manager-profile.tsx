@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
+import { EmailChangeOtpDialog } from '@/components/email-change-otp-dialog'
 import { authApi } from '@/lib/api'
 
 export function ManagerProfile() {
@@ -15,6 +16,10 @@ export function ManagerProfile() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // E-mail change confirmation (OTP sent to the NEW address)
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
+  const [resendAvailableIn, setResendAvailableIn] = useState(60)
   
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -49,12 +54,22 @@ export function ManagerProfile() {
     
     try {
       const result = await authApi.updateProfile({ fullName: fullName.trim(), email: email.trim() || undefined })
-      
+
+      // An e-mail change is not applied immediately: the backend sends an OTP
+      // to the NEW address and only updates the record once it is confirmed.
+      if (result.requiresEmailConfirmation && result.pendingEmail) {
+        setPendingEmail(result.pendingEmail)
+        setResendAvailableIn(result.resendAvailableIn || 60)
+        // Keep the OLD address on screen until the change is confirmed.
+        setEmail(user!.email || '')
+        return
+      }
+
       // Update local auth state
       if (result.user) {
         updateAccount(user!.id, { fullName: result.user.fullName, email: result.user.email })
       }
-      
+
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err: unknown) {
@@ -411,9 +426,27 @@ export function ManagerProfile() {
         </div>
       </div>
 
+      {/* E-mail change confirmation */}
+      {pendingEmail && (
+        <EmailChangeOtpDialog
+          pendingEmail={pendingEmail}
+          resendAvailableIn={resendAvailableIn}
+          onVerified={(newEmail) => {
+            setPendingEmail(null)
+            setEmail(newEmail)
+            if (user) updateAccount(user.id, { email: newEmail })
+            setSaveSuccess(true)
+            setTimeout(() => setSaveSuccess(false), 3000)
+          }}
+          onCancel={() => {
+            setPendingEmail(null)
+            setEmail(user?.email || '')
+          }}
+        />
+      )}
+
       {/* Logout Confirmation Modal */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      {showLogoutConfirm && (        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl border-[2px] border-[#151515] bg-white shadow-[6px_6px_0_#151515]">
             <div className="flex items-center gap-3 border-b border-[#151515]/10 p-4">
               <div className="flex size-10 items-center justify-center rounded-full bg-red-100">

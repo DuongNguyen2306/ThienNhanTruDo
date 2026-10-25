@@ -21,6 +21,7 @@ const tenantRoutes = require('./routes/tenant');
 const paymentRoutes = require('./routes/payment');
 const notificationRoutes = require('./routes/notifications');
 const geocodeRoutes = require('./routes/geocode');
+const websiteReviewRoutes = require('./routes/website-reviews');
 
 const app = express();
 
@@ -98,6 +99,7 @@ app.use('/api/tenant', tenantRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/geocode', geocodeRoutes);
+app.use('/api/website-reviews', websiteReviewRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -124,8 +126,7 @@ app.listen(PORT, () => {
 ║   Server: http://localhost:${PORT}                   ║
 ║   Environment: ${config.nodeEnv.padEnd(20)}           ║
 ║   Database: ${dbName.padEnd(32)}   ║
-║                                                   ║
-║   Demo OTP: ${config.demoOtp}                               ║
+║   Email: ${config.email.configured ? `${config.email.provider} (configured)` : `${config.email.provider} (NOT configured)`}      ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
   `);

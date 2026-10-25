@@ -103,8 +103,14 @@ function PasswordChangeCard() {
     setError(null)
     setSuccess(false)
 
-    if (newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự')
+    if (!currentPassword) {
+      setError('Vui lòng nhập mật khẩu hiện tại')
+      return
+    }
+
+    // ── Task 7: mirror the backend rule exactly (8+ chars, upper case, digit)
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự, gồm chữ hoa và chữ số')
       return
     }
 
@@ -113,15 +119,28 @@ function PasswordChangeCard() {
       return
     }
 
+    if (newPassword === currentPassword) {
+      setError('Mật khẩu mới không được trùng với mật khẩu hiện tại')
+      return
+    }
+
     setLoading(true)
     try {
-      await authApi.changePassword(currentPassword, newPassword)
+      const res = await authApi.changePassword(currentPassword, newPassword)
+
+      // The backend rotates the session epoch, so every previously issued
+      // token is now invalid. We store the freshly issued one to keep THIS
+      // device signed in.
+      if (res.token) {
+        localStorage.setItem('token', res.token)
+      }
+
       setSuccess(true)
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-    } catch (err: any) {
-      setError(err.message || 'Không thể đổi mật khẩu')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Không thể đổi mật khẩu')
     } finally {
       setLoading(false)
     }
@@ -133,12 +152,15 @@ function PasswordChangeCard() {
         <Lock className="size-5 text-emerald-600" />
         <h3 className="text-lg font-bold">Đổi mật khẩu</h3>
       </div>
-      <p className="mb-4 text-sm text-slate-500">Mật khẩu mạnh ≥ 6 ký tự, có chữ hoa, số và ký tự đặc biệt.</p>
+      <p className="mb-4 text-sm text-slate-500">
+        Mật khẩu mạnh ≥ 8 ký tự, có chữ hoa và chữ số. Sau khi đổi, các phiên đăng nhập
+        khác sẽ bị vô hiệu hoá.
+      </p>
 
       {success && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4">
           <CheckCircle className="size-5 text-emerald-600" />
-          <p className="text-sm font-semibold text-emerald-700">Đổi mật khẩu thành công!</p>
+          <p className="text-sm font-semibold text-emerald-700">Đổi mật khẩu thành công! Các phiên đăng nhập khác đã bị vô hiệu hoá.</p>
         </div>
       )}
 
@@ -168,7 +190,7 @@ function PasswordChangeCard() {
             onChange={(e) => setNewPassword(e.target.value)}
             className="h-11 w-full rounded-xl border-2 border-slate-200 px-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
             required
-            minLength={6}
+            minLength={8}
           />
         </div>
         <div>
@@ -179,7 +201,7 @@ function PasswordChangeCard() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="h-11 w-full rounded-xl border-2 border-slate-200 px-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
             required
-            minLength={6}
+            minLength={8}
           />
         </div>
         <button

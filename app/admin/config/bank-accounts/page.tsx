@@ -55,10 +55,11 @@ export default function AdminBankAccountsPage() {
   const fetchAccounts = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/payment/admin/bank-accounts');
+      const res = await api.get<{ accounts: BankAccount[] }>('/api/payment/admin/bank-accounts');
       setAccounts(res.data.accounts || []);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Lỗi khi tải danh sách');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Lỗi khi tải danh sách');
     } finally {
       setLoading(false);
     }
@@ -77,16 +78,17 @@ export default function AdminBankAccountsPage() {
 
     try {
       if (editingId) {
-        await api.put(`/payment/admin/bank-accounts/${editingId}`, form);
+        await api.put(`/api/payment/admin/bank-accounts/${editingId}`, form);
       } else {
-        await api.post('/payment/admin/bank-accounts', form);
+        await api.post('/api/payment/admin/bank-accounts', form);
       }
       setShowForm(false);
       setEditingId(null);
       setForm({ bankName: '', bankBin: '', accountNumber: '', accountHolder: '', isActive: false, qrImageUrl: '' });
       fetchAccounts();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Lỗi khi lưu');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Lỗi khi lưu');
     }
   };
 
@@ -106,10 +108,11 @@ export default function AdminBankAccountsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Xóa tài khoản này?')) return;
     try {
-      await api.delete(`/payment/admin/bank-accounts/${id}`);
+      await api.delete(`/api/payment/admin/bank-accounts/${id}`);
       fetchAccounts();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Lỗi khi xóa');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      alert(error.response?.data?.error || 'Lỗi khi xóa');
     }
   };
 

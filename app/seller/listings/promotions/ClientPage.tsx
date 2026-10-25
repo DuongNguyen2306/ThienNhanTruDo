@@ -851,7 +851,7 @@ export default function SellerPromotionsPage() {
                 <div className="flex gap-3">
                   <button
                     onClick={handlePurchaseBoostWallet}
-                    disabled={!selectedListing || !selectedPackage || purchasing || (wallet && wallet.balance < (selectedPackage?.price || 0))}
+                    disabled={!selectedListing || !selectedPackage || purchasing || (!!wallet && wallet.balance < (selectedPackage?.price || 0))}
                     className="flex-1 flex items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] py-4 font-bold text-white shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
                   >
                     {purchasing ? (

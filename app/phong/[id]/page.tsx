@@ -63,8 +63,13 @@ export default function ListingDetailPage() {
   const [seller, setSeller] = useState<any>(null)
   const [reviews, setReviews] = useState<any[]>([])
   const [reviewStats, setReviewStats] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  // Explicit lifecycle: 'loading' | 'success' | 'notFound' | 'error'.
+  // A null listing while loading must NOT be treated as "not found".
+  const [status, setStatus] = useState<'loading' | 'success' | 'notFound' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
+  // Bumped by the retry button to re-run the listing fetch.
+  const [reloadToken, setReloadToken] = useState(0)
+  const loading = status === 'loading'
 
   // ── Review state ──────────────────────────────────────────────
   const [canReview, setCanReview] = useState(false)
@@ -113,36 +118,55 @@ export default function ListingDetailPage() {
   // Fetch listing data from API
   useEffect(() => {
     if (!id) return
-    setLoading(true)
+    // Guard against a stale response overwriting a newer one (ID change) and
+    // against setting state after unmount.
+    let cancelled = false
+
+    setStatus('loading')
     setError(null)
-    // Fetch listing detail
+    setListing(null)
+    setSeller(null)
+
     listingApi.getById(id)
       .then((data) => {
+        if (cancelled) return
         const listingData = (data as any).listing || data
         if (!listingData || !listingData.id) {
-          setError('Không tìm thấy phòng trọ này.')
-          setLoading(false)
+          // The API answered 200 but carried no room — treat it as not found.
+          setStatus('notFound')
           return
         }
         setListing(listingData)
-        // Use seller info from listing response
-        if (listingData.seller) {
-          setSeller({
-            id: listingData.seller.id,
-            name: listingData.seller.fullName || listingData.seller.name || 'Chủ trọ',
-            phone: listingData.seller.phone,
-            trustScore: listingData.seller.sellerProfile?.trustScore,
-            responseRate: listingData.seller.sellerProfile?.responseRate,
-            brand: listingData.seller.sellerProfile?.brand,
-          })
-        }
+        // Use seller info from listing response. The seller is rendered
+        // unconditionally, so fall back to a placeholder instead of failing
+        // the whole page when the backend omits it.
+        setSeller({
+          id: listingData.seller?.id ?? listingData.sellerId ?? 'unknown',
+          name: listingData.seller?.fullName || listingData.seller?.name || 'Chủ trọ',
+          phone: listingData.seller?.phone ?? '',
+          trustScore: listingData.seller?.sellerProfile?.trustScore,
+          responseRate: listingData.seller?.sellerProfile?.responseRate,
+          brand: listingData.seller?.sellerProfile?.brand,
+        })
+        setStatus('success')
       })
-      .catch(err => {
+      .catch((err: any) => {
+        if (cancelled) return
+        // Only a real 404 (or an explicit not-found payload) means the room
+        // does not exist. Anything else is a transport/server failure.
+        if (err?.status === 404) {
+          setStatus('notFound')
+          return
+        }
         console.error('[ListingDetail] Fetch error:', err)
         setError('Không thể tải thông tin phòng. Vui lòng thử lại.')
+        setStatus('error')
       })
-      .finally(() => setLoading(false))
-  }, [id])
+
+    return () => {
+      cancelled = true
+    }
+  }, [id, reloadToken])
 
   // Fetch reviews from listing-specific endpoint
   useEffect(() => {
@@ -286,7 +310,71 @@ export default function ListingDetailPage() {
     setFormErrors({})
   }
 
-  if (!listing || !seller) {
+  // ── Loading state: skeleton, never a false "not found" ────────────
+  if (status === 'loading') {
+    return (
+      <main className="min-h-screen bg-[#F5F5F0]">
+        <BrutalHeader />
+        <div className="mx-auto max-w-[1440px] px-5 py-20 lg:px-10">
+          <div className="mb-6 flex items-center gap-3">
+            <span className="size-8 animate-pulse rounded-lg bg-[#E5E5E0]" />
+            <span className="h-8 w-2/3 animate-pulse rounded-lg bg-[#E5E5E0]" />
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+            <div className="space-y-4">
+              <div className="h-[360px] animate-pulse rounded-2xl border-[3px] border-[#151515] bg-[#E5E5E0]" />
+              <div className="h-24 animate-pulse rounded-xl bg-[#E5E5E0]" />
+              <div className="h-40 animate-pulse rounded-xl bg-[#E5E5E0]" />
+            </div>
+            <div className="space-y-4">
+              <div className="h-32 animate-pulse rounded-xl bg-[#E5E5E0]" />
+              <div className="h-48 animate-pulse rounded-xl bg-[#E5E5E0]" />
+            </div>
+          </div>
+          <p className="mt-8 text-center text-sm font-medium text-[#151515]/50">
+            Đang tải thông tin phòng…
+          </p>
+        </div>
+        <BrutalFooter />
+      </main>
+    )
+  }
+
+  // ── Error state: the request failed, the room may still exist ─────
+  if (status === 'error') {
+    return (
+      <main className="min-h-screen bg-[#F5F5F0]">
+        <BrutalHeader />
+        <div className="mx-auto max-w-[1440px] px-5 py-20 lg:px-10">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-[#151515]">Không tải được thông tin phòng</h1>
+            <p className="mt-2 text-sm text-[#151515]/60">
+              {error || 'Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.'}
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setReloadToken((n) => n + 1)}
+                className="rounded-xl border-[2px] border-[#151515] bg-[#FDE047] px-5 py-2.5 text-sm font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0_#151515]"
+              >
+                Thử lại
+              </button>
+              <Link
+                href="/tim-kiem"
+                className="rounded-xl border-[2px] border-[#151515] bg-white px-5 py-2.5 text-sm font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0_#151515]"
+              >
+                Quay về trang tìm kiếm
+              </Link>
+            </div>
+          </div>
+        </div>
+        <BrutalFooter />
+      </main>
+    )
+  }
+
+  // ── Not found: only when the API really confirmed there is no room ─
+  if (status === 'notFound' || !listing || !seller) {
     return (
       <main className="min-h-screen bg-[#F5F5F0]">
         <BrutalHeader />

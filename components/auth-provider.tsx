@@ -21,7 +21,7 @@ type RegisterPayload = {
   phone: string
   email: string
   password: string
-  role: 'tenant' | 'seller'
+  // NOTE: no role — public registration always creates a TENANT account.
   sellerProfile?: {
     idNumber?: string
     brand?: string
@@ -33,13 +33,18 @@ type RegisterPayload = {
 type AuthContextValue = {
   user: SessionUser | null
   ready: boolean
+  /** True while the auth state is still being determined (initializing). */
+  loading: boolean
   authState: AuthState
   verificationError: VerificationErrorReason
   accounts: typeof DEMO_ACCOUNTS
   login: (user: SessionUser, token?: string) => void
   loginById: (id: string) => void
   logout: () => void
-  register: (payload: RegisterPayload) => Promise<{ ok: true; account: SessionUser } | { ok: false; error: string }>
+  register: (payload: RegisterPayload) => Promise<
+    | { ok: true; account: SessionUser; requiresVerification?: boolean }
+    | { ok: false; error: string }
+  >
   updateAccount: (id: string, patch: Partial<SessionUser>) => void
   switchRole: (role: Role) => void
   signOutEverywhere: () => void
@@ -51,6 +56,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   ready: false,
+  loading: true,
   authState: 'initializing',
   verificationError: null,
   accounts: DEMO_ACCOUNTS,
@@ -128,6 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   
   // ready is true when auth state is determined (not initializing)
   const ready = authState !== 'initializing'
+  // loading mirrors the "still resolving the session" state
+  const loading = !ready
   
   // Request ID mechanism: each login/logout increments this
   // Any verification response with old request ID is ignored
@@ -386,12 +394,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password: payload.password,
           fullName: payload.fullName,
           email: payload.email || '',
-          role: payload.role,
+          // NOTE: no role is sent. Public registration always creates a TENANT
+          // account; becoming a seller goes through the upgrade flow.
         }
-        const { user: apiUser, token } = await authApi.register(regData)
+        // Task 7: the backend creates the account UNVERIFIED and emails an OTP.
+        // No token is issued, so we must NOT start a session here — the caller
+        // has to complete the e-mail verification step first.
+        const { user: apiUser } = await authApi.register(regData)
         const sessionUser = apiUserToSession(apiUser)
-        login(sessionUser, token)
-        return { ok: true as const, account: sessionUser }
+        return {
+          ok: true as const,
+          account: sessionUser,
+          requiresVerification: true as const,
+        }
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : 'Dang ky that bai'
         return { ok: false as const, error: errorMsg }
@@ -417,14 +432,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const session: SessionUser = {
       id: `u-${Date.now().toString(36)}`,
-      role: payload.role,
+      role: 'tenant',
       fullName: payload.fullName,
       name: payload.fullName,
       email: payload.email,
       phone: payload.phone,
       initials,
-      title: payload.role === 'seller' ? 'Chu dang tin (cho duyet)' : 'Nguoi thue',
-      sellerStatus: payload.role === 'seller' ? 'pending' : 'none',
+      title: 'Nguoi thue',
+      sellerStatus: 'none',
       sellerProfile: payload.sellerProfile,
     }
 
@@ -471,6 +486,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       ready,
+      loading,
       authState,
       verificationError,
       accounts: DEMO_ACCOUNTS,
@@ -485,7 +501,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refresh,
       isDemoMode: USE_DEMO_MODE,
     }),
-    [user, login, loginById, logout, register, updateAccount, switchRole, signOutEverywhere, retryVerification, refresh],
+    [user, ready, loading, login, loginById, logout, register, updateAccount, switchRole, signOutEverywhere, retryVerification, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

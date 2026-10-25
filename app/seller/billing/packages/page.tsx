@@ -459,7 +459,7 @@ export default function PackagesPage() {
                   {/* Wallet option */}
                   <button
                     onClick={() => setPaymentMethod('wallet')}
-                    disabled={wallet && wallet.balance < selectedPackage.price}
+                    disabled={!!wallet && wallet.balance < selectedPackage.price}
                     className={cn(
                       'relative flex w-full flex-col items-start rounded-xl border-[2px] p-4 text-left transition-all',
                       paymentMethod === 'wallet'
@@ -524,7 +524,7 @@ export default function PackagesPage() {
                         handleShowQRCode()
                       }
                     }}
-                    disabled={processing || (paymentMethod === 'wallet' && wallet && wallet.balance < selectedPackage.price)}
+                    disabled={processing || (paymentMethod === 'wallet' && !!wallet && wallet.balance < selectedPackage.price)}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] py-4 font-bold text-white shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
                   >
                     {processing ? (

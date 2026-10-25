@@ -1,6 +1,9 @@
 const express = require('express');
 const prisma = require('../db');
 const { authenticate, authorize } = require('../middleware/auth');
+const revenueHelper = require('../helpers/revenueHelper');
+const reviewHelper = require('../helpers/websiteReviewHelper');
+const internalStore = require('../helpers/internalStore');
 
 const router = express.Router();
 
@@ -308,71 +311,192 @@ router.post('/account-proposals/:id/review', async (req, res, next) => {
 // ============================================
 router.get('/dashboard', async (req, res, next) => {
   try {
+    const now = new Date();
+
+    // ── "This month" = from the 1st of the current calendar month ────────
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    // ── TASK 1: real user counts, filtered by role ───────────────────────
     const [
       totalUsers,
-      totalListings,
-      activeListings,
-      pendingListings,
+      totalTenants,
       totalSellers,
-      totalTransactions,
+      totalManagers,
+      totalAdmins,
+      newUsersThisMonth,
+      newUsersThisWeek,
+      newUsersLastWeek,
+      newTenantsThisMonth,
+      newSellersThisMonth,
     ] = await Promise.all([
       prisma.user.count(),
+      prisma.user.count({ where: { role: 'tenant' } }),
+      prisma.user.count({ where: { role: 'seller' } }),
+      prisma.user.count({ where: { role: 'manager' } }),
+      prisma.user.count({ where: { role: 'admin' } }),
+      prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
+      prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
+      prisma.user.count({ where: { createdAt: { gte: twoWeeksAgo, lt: weekAgo } } }),
+      prisma.user.count({ where: { role: 'tenant', createdAt: { gte: monthStart } } }),
+      prisma.user.count({ where: { role: 'seller', createdAt: { gte: monthStart } } }),
+    ]);
+
+    const [totalListings, activeListings, pendingListings] = await Promise.all([
       prisma.listing.count(),
       prisma.listing.count({ where: { status: 'active' } }),
       prisma.listing.count({ where: { status: 'pending' } }),
-      prisma.user.count({ where: { role: 'seller' } }),
-      prisma.transaction.aggregate({
-        _sum: { amount: true },
-        _count: true,
-      }),
     ]);
 
-    // Growth stats (compare last 7 days vs previous 7 days)
-    const now = new Date();
-    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-    const twoWeeksAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
+    const newListingsThisWeek = await prisma.listing.count({ where: { createdAt: { gte: weekAgo } } });
 
-    const [newUsersThisWeek, newListingsThisWeek] = await Promise.all([
-      prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
-      prisma.listing.count({ where: { createdAt: { gte: weekAgo } } }),
-    ]);
+    // ── TASK 2: revenue, computed with the canonical helper ──────────────
+    // Only completed transactions are loaded; pending/failed are counted
+    // separately so they can be reported WITHOUT being counted as revenue.
+    const revenueTransactions = await prisma.transaction.findMany({
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        amount: true,
+        method: true,
+        description: true,
+        createdAt: true,
+      },
+    });
+    const revenue = revenueHelper.summarizeTransactions(revenueTransactions);
+
+    // ── TASK 2: revenue for the CURRENT calendar month ───────────────────
+    // The "all time" figure and the "this month" figure come from the SAME
+    // helper, so the dashboard can never show two inconsistent numbers.
+    const monthTransactions = revenueTransactions.filter(
+      (tx) => new Date(tx.createdAt) >= monthStart
+    );
+    const monthlyRevenue = revenueHelper.summarizeTransactions(monthTransactions);
 
     // Listing status breakdown
-    const listingStats = await prisma.listing.groupBy({
-      by: ['status'],
-      _count: true,
-    });
-
+    const listingStats = await prisma.listing.groupBy({ by: ['status'], _count: true });
     const listingsByStatus = {};
     listingStats.forEach((s) => {
       listingsByStatus[s.status] = s._count;
     });
 
     // User role breakdown
-    const userStats = await prisma.user.groupBy({
-      by: ['role'],
-      _count: true,
-    });
-
+    const userStats = await prisma.user.groupBy({ by: ['role'], _count: true });
     const usersByRole = {};
     userStats.forEach((s) => {
       usersByRole[s.role] = s._count;
     });
 
+    // ── TASK 4/5: website review activity + aggregate ───────────────────
+    const [reviewAggregate, reviewActivity, roomReviewCount] = await Promise.all([
+      reviewHelper.getAggregate(),
+      reviewHelper.getActivitySeries({ buckets: 12 }),
+      prisma.review.count(),
+    ]);
+
     res.json({
       stats: {
+        // Task 1 — user statistics
         totalUsers,
+        totalTenants,
+        totalSellers,
+        totalManagers,
+        totalAdmins,
+        newUsersThisMonth,
+        newUsersThisWeek,
+        newUsersLastWeek,
+        newTenantsThisMonth,
+        newSellersThisMonth,
+        usersByRole,
+
+        // Listings
         totalListings,
         activeListings,
         pendingListings,
-        totalSellers,
-        totalTransactions: totalTransactions._count,
-        totalRevenue: totalTransactions._sum.amount || 0,
-        newUsersThisWeek,
         newListingsThisWeek,
         listingsByStatus,
-        usersByRole,
+
+        // Task 2 — revenue (canonical figures)
+        totalRevenue: revenue.grossRevenue,
+        netRevenue: revenue.netRevenue,
+        totalRefunded: revenue.refunds,
+        totalDeposits: revenue.deposits,
+        pendingAmount: revenue.pendingAmount,
+        failedAmount: revenue.failedAmount,
+        totalTransactions: revenueTransactions.length,
+        revenueCategories: revenue.categories,
+
+        // Task 2 — revenue for the current calendar month
+        monthlyRevenue: monthlyRevenue.grossRevenue,
+        monthlyNetRevenue: monthlyRevenue.netRevenue,
+        monthlyRefundCount: monthlyRevenue.refundCount,
+        monthlyRevenueCount: monthlyRevenue.revenueCount,
+
+        // Task 5 — reviews
+        websiteReviewCount: reviewAggregate.totalReviews,
+        websiteReviewAverage: reviewAggregate.average,
+        roomReviewCount,
+        reviewActivity,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// GET /api/admin/dashboard/users-growth
+// New-user growth over time (Task 4 chart).
+// ============================================
+router.get('/dashboard/users-growth', async (req, res, next) => {
+  try {
+    const { period = 'month', buckets = 12 } = req.query;
+    const bucketCount = Math.min(24, Math.max(3, parseInt(buckets, 10) || 12));
+
+    const now = new Date();
+
+    // Build a continuous axis so empty periods still render as zero.
+    const axis = [];
+    for (let i = bucketCount - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      axis.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: `T${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`,
+        total: 0,
+        tenant: 0,
+        seller: 0,
+      });
+    }
+    const index = new Map(axis.map((a) => [a.key, a]));
+
+    // Load users created within the axis window.
+    const windowStart = new Date(now.getFullYear(), now.getMonth() - (bucketCount - 1), 1);
+    const users = await prisma.user.findMany({
+      where: { createdAt: { gte: windowStart } },
+      select: { role: true, createdAt: true },
+    });
+
+    for (const u of users) {
+      const d = new Date(u.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const bucket = index.get(key);
+      if (!bucket) continue;
+      bucket.total += 1;
+      if (u.role === 'tenant') bucket.tenant += 1;
+      else if (u.role === 'seller') bucket.seller += 1;
+    }
+
+    res.json({
+      period: period === 'day' ? 'day' : 'month',
+      series: axis.map((a) => ({
+        label: a.label,
+        key: a.key,
+        total: a.total,
+        tenant: a.tenant,
+        seller: a.seller,
+      })),
     });
   } catch (error) {
     next(error);
@@ -678,15 +802,31 @@ router.delete('/listings/:id', async (req, res, next) => {
 // ============================================
 // GET /api/admin/transactions - Transaction history
 // ============================================
+// TASK 6: supports `search`, `startDate` and `endDate` so a dashboard metric
+// can deep-link into exactly the transactions that produced it.
 router.get('/transactions', async (req, res, next) => {
   try {
-    const { type, status, page = '1', limit = '20' } = req.query;
-    const pageNum = parseInt(page, 10) || 1;
-    const limitNum = parseInt(limit, 10) || 20;
+    const { type, status, method, search, startDate, endDate, page = '1', limit = '20' } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
 
     const where = {};
     if (type) where.type = type;
     if (status) where.status = status;
+    if (method) where.method = method;
+
+    const dateFilter = revenueHelper.buildDateRange(startDate, endDate);
+    if (dateFilter) where.createdAt = dateFilter.createdAt;
+
+    if (search) {
+      where.OR = [
+        { id: { contains: search } },
+        { description: { contains: search } },
+        { vnpayTxRef: { contains: search } },
+        { user: { fullName: { contains: search } } },
+        { user: { phone: { contains: search } } },
+      ];
+    }
 
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
@@ -703,13 +843,21 @@ router.get('/transactions', async (req, res, next) => {
       prisma.transaction.count({ where }),
     ]);
 
+    // Annotate each row with its derived category so the admin UI can show
+    // the product category without re-implementing the classification rules.
+    const annotated = transactions.map((t) => ({
+      ...t,
+      category: revenueHelper.classifyTransaction(t).category,
+      isRevenue: revenueHelper.isRecognizedRevenue(t),
+    }));
+
     res.json({
-      transactions,
+      transactions: annotated,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
       },
     });
   } catch (error) {
@@ -720,39 +868,59 @@ router.get('/transactions', async (req, res, next) => {
 // ============================================
 // GET /api/admin/finance/overview - Finance overview stats
 // ============================================
+// TASK 2: every figure below comes from revenueHelper.summarizeTransactions,
+// which is the single source of truth for revenue math.
+//
+//  • totalRevenue  = recognized revenue (completed `payment` transactions only)
+//  • netRevenue    = totalRevenue − refunds
+//  • totalDeposits = wallet top-ups — a LIABILITY, reported separately so it
+//                    can never be mistaken for revenue
+//  • pendingAmount = unpaid purchases — NOT revenue
+// ============================================
 router.get('/finance/overview', async (req, res, next) => {
   try {
-    // Total revenue: only count COMPLETED transactions
-    const [totalRevenue, completedCount, totalRefunded, pendingCount, transactionCount] = await Promise.all([
-      // Sum of completed payment transactions
-      prisma.transaction.aggregate({
-        where: { status: 'completed', type: 'payment' },
-        _sum: { amount: true },
-      }),
-      // Count of completed transactions
-      prisma.transaction.count({ where: { status: 'completed' } }),
-      // Sum of refunded amounts (only count from 'refunded' status)
-      prisma.transaction.aggregate({
-        where: { status: 'refunded' },
-        _sum: { amount: true },
-      }),
-      // Count of pending transactions
-      prisma.transaction.count({ where: { status: 'pending' } }),
-      // Total transaction count
-      prisma.transaction.count(),
-    ]);
+    const { startDate, endDate } = req.query;
+    const dateFilter = revenueHelper.buildDateRange(startDate, endDate);
 
-    const totalRev = totalRevenue._sum.amount || 0;
-    const refunded = totalRefunded._sum.amount || 0;
+    const where = {};
+    if (dateFilter) where.createdAt = dateFilter.createdAt;
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        amount: true,
+        method: true,
+        description: true,
+        createdAt: true,
+      },
+    });
+
+    const summary = revenueHelper.summarizeTransactions(transactions);
+
+    // The "period" figure is the same as the total when no range is given.
+    const hasRange = Boolean(dateFilter);
 
     res.json({
-      totalRevenue: totalRev, // Gross revenue (completed only)
-      periodRevenue: totalRev, // For now, same as total since we don't have period filter yet
-      completedCount,
-      totalRefunded: refunded,
-      netRevenue: totalRev - refunded, // Net = Gross - Refunds
-      pendingCount,
-      transactionCount,
+      totalRevenue: summary.grossRevenue,
+      periodRevenue: summary.grossRevenue,
+      netRevenue: summary.netRevenue,
+      totalRefunded: summary.refunds,
+      totalDeposits: summary.deposits,
+      totalWithdrawals: summary.withdrawals,
+      pendingAmount: summary.pendingAmount,
+      failedAmount: summary.failedAmount,
+      completedCount: summary.revenueCount,
+      revenueCount: summary.revenueCount,
+      refundCount: summary.refundCount,
+      depositCount: summary.depositCount,
+      pendingCount: summary.pendingCount,
+      failedCount: summary.failedCount,
+      transactionCount: transactions.length,
+      categories: summary.categories,
+      hasRange,
     });
   } catch (error) {
     next(error);
@@ -762,109 +930,39 @@ router.get('/finance/overview', async (req, res, next) => {
 // ============================================
 // GET /api/admin/finance/chart - Revenue chart data
 // ============================================
+// TASK 2 FIX: the previous implementation filtered `status: 'completed'` in the
+// query and then branched on `tx.status === 'refunded'`, so the refund branch
+// was unreachable and refunds NEVER appeared in the chart.
+//
+// Now ALL transactions in range are loaded and bucketed by the helper, which
+// keeps revenue, refunds and wallet deposits in SEPARATE series. Deposits are
+// never added to the revenue series, so the chart cannot present a wallet
+// top-up as earned revenue.
+// ============================================
 router.get('/finance/chart', async (req, res, next) => {
   try {
     const { period = 'day', startDate, endDate } = req.query;
-    
-    // Build date filter
-    let start = new Date();
-    let end = new Date();
-    
-    if (startDate) start = new Date(startDate);
-    if (endDate) end = new Date(endDate);
-    
-    // Default: last 30 days
-    if (!startDate && !endDate) {
-      start.setDate(start.getDate() - 30);
-    }
-    
-    // Get all completed transactions in date range
+    const dateFilter = revenueHelper.buildDateRange(startDate, endDate);
+
+    const where = {};
+    if (dateFilter) where.createdAt = dateFilter.createdAt;
+
     const transactions = await prisma.transaction.findMany({
-      where: {
-        status: 'completed',
-        createdAt: { gte: start, lte: end },
-      },
+      where,
       select: {
-        amount: true,
-        status: true,
-        createdAt: true,
+        id: true,
         type: true,
+        status: true,
+        amount: true,
+        method: true,
+        description: true,
+        createdAt: true,
       },
       orderBy: { createdAt: 'asc' },
     });
-    
-    // Group by period
-    const grouped = {};
-    
-    transactions.forEach((tx) => {
-      const date = new Date(tx.createdAt);
-      let key;
-      
-      switch (period) {
-        case 'week':
-          // Week number
-          const weekStart = new Date(date);
-          weekStart.setDate(date.getDate() - date.getDay());
-          key = weekStart.toISOString().slice(0, 10);
-          break;
-        case 'month':
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          break;
-        case 'quarter':
-          const q = Math.floor(date.getMonth() / 3) + 1;
-          key = `${date.getFullYear()}-Q${q}`;
-          break;
-        case 'year':
-          key = String(date.getFullYear());
-          break;
-        default: // day
-          key = date.toISOString().slice(0, 10);
-      }
-      
-      if (!grouped[key]) {
-        grouped[key] = { revenue: 0, count: 0, refunds: 0 };
-      }
-      
-      if (tx.status === 'completed') {
-        grouped[key].revenue += tx.amount;
-        grouped[key].count += 1;
-      } else if (tx.status === 'refunded') {
-        grouped[key].refunds += tx.amount;
-      }
-    });
-    
-    // Convert to array with labels
-    const result = Object.entries(grouped).map(([key, data]) => {
-      let label;
-      switch (period) {
-        case 'week':
-          label = `Tuần ${key}`;
-          break;
-        case 'month':
-          const [y, m] = key.split('-');
-          label = `Tháng ${parseInt(m)}/${y}`;
-          break;
-        case 'quarter':
-          label = key;
-          break;
-        case 'year':
-          label = `Năm ${key}`;
-          break;
-        default:
-          const d = new Date(key);
-          label = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-      }
-      return {
-        label,
-        revenue: Math.round(data.revenue),
-        count: data.count,
-        refunds: Math.round(data.refunds),
-      };
-    });
-    
-    // Sort by key
-    result.sort((a, b) => a.label.localeCompare(b.label));
-    
+
+    const result = revenueHelper.bucketTransactions(transactions, period);
+
     res.json(result);
   } catch (error) {
     next(error);
@@ -872,27 +970,48 @@ router.get('/finance/chart', async (req, res, next) => {
 });
 
 // ============================================
-// GET /api/admin/finance/sources - Revenue by type
+// GET /api/admin/finance/sources - Revenue by product category
+// ============================================
+// TASK 2 FIX: the previous implementation grouped by the raw `type` field, so
+// wallet top-ups appeared side-by-side with genuine revenue and the totals
+// double counted money.
+//
+// Categories are now derived from (type, method, status, description) and the
+// response separates revenue categories from non-revenue ones.
 // ============================================
 router.get('/finance/sources', async (req, res, next) => {
   try {
-    const sources = await prisma.transaction.groupBy({
-      by: ['type'],
-      where: { status: 'completed' },
-      _sum: { amount: true },
-      _count: true,
+    const { startDate, endDate } = req.query;
+    const dateFilter = revenueHelper.buildDateRange(startDate, endDate);
+
+    const where = {};
+    if (dateFilter) where.createdAt = dateFilter.createdAt;
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        amount: true,
+        method: true,
+        description: true,
+        createdAt: true,
+      },
     });
-    
-    const total = sources.reduce((sum, s) => sum + (s._sum.amount || 0), 0);
-    
-    const result = sources.map((s) => ({
-      type: s.type,
-      total: s._sum.amount || 0,
-      count: s._count,
-      percentage: total > 0 ? Math.round((s._sum.amount || 0) / total * 100) : 0,
-    }));
-    
-    res.json(result);
+
+    const summary = revenueHelper.summarizeTransactions(transactions);
+
+    res.json({
+      // Revenue categories only (the breakdown the task asks for).
+      revenue: summary.categories.filter((c) => c.isRevenue),
+      // Non-revenue flows, shown separately so nothing is double counted.
+      nonRevenue: summary.categories.filter((c) => !c.isRevenue),
+      grossRevenue: summary.grossRevenue,
+      netRevenue: summary.netRevenue,
+      totalDeposits: summary.deposits,
+      totalRefunded: summary.refunds,
+    });
   } catch (error) {
     next(error);
   }
@@ -901,12 +1020,15 @@ router.get('/finance/sources', async (req, res, next) => {
 // ============================================
 // GET /api/admin/config - System config
 // ============================================
+// Internal records (OTP state, website-review claims, session epochs) share the
+// SystemConfig collection. They are filtered out here so operators only ever
+// see real configuration keys.
 router.get('/config', async (req, res, next) => {
   try {
     const configs = await prisma.systemConfig.findMany();
-
     const configObj = {};
     configs.forEach((c) => {
+      if (internalStore.isInternalKey(c.key)) return;
       try {
         configObj[c.key] = JSON.parse(c.value);
       } catch {
@@ -982,6 +1104,184 @@ router.get('/audit', async (req, res, next) => {
         limit: parseInt(limit),
         total,
         totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// GET /api/admin/reviews - Admin review history (Task 5)
+// ============================================
+// Covers BOTH review types so the admin has a single history view:
+//   • website reviews  (rating for the platform)
+//   • room reviews     (rating for a listing)
+//
+// Every row links back to the record that produced it, so a reviewer, a rating
+// and its qualifying transaction are always traceable (Task 6).
+// This route is admin-only (enforced by the router-level authorize('admin')).
+router.get('/reviews', async (req, res, next) => {
+  try {
+    const {
+      type = 'all', // all | website | room
+      search = '',
+      status = '',
+      score = '',
+      startDate = '',
+      endDate = '',
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const q = String(search || '').trim().toLowerCase();
+
+    const dateFilter = revenueHelper.buildDateRange(startDate, endDate);
+    const scoreNum = score ? Number(score) : null;
+    const validScore = scoreNum !== null && Number.isFinite(scoreNum) ? scoreNum : null;
+
+    // ── Website reviews ────────────────────────────────────────────────
+    let websiteRows = [];
+    if (type === 'all' || type === 'website') {
+      const { items } = await reviewHelper.listReviews({
+        search: q,
+        status: status === 'all' ? '' : status,
+        score: validScore ? String(validScore) : '',
+        startDate,
+        endDate,
+        page: 1,
+        limit: 1000, // filter + paginate in memory to merge both sources
+      });
+      websiteRows = items.map((r) => ({
+        id: r.id,
+        reviewType: 'website',
+        reviewerId: r.userId,
+        reviewerName: r.reviewerName,
+        reviewerInitials: r.reviewerInitials,
+        reviewerRole: r.reviewerRole,
+        score: r.score,
+        title: r.title,
+        content: r.content,
+        status: r.status,
+        hiddenReason: r.hiddenReason,
+        adminReply: r.adminReply,
+        createdAt: r.createdAt,
+        listing: null,
+        transaction: {
+          id: r.transactionId,
+          amount: r.transactionAmount,
+          method: r.transactionMethod,
+          description: r.transactionDescription,
+          createdAt: r.transactionCreatedAt,
+        },
+      }));
+    }
+
+    // ── Room (listing) reviews ─────────────────────────────────────────
+    let roomRows = [];
+    if (type === 'all' || type === 'room') {
+      const where = {};
+      if (status && status !== 'all') {
+        where.hidden = status === 'hidden';
+      }
+      if (validScore !== null) {
+        where.score = validScore;
+      }
+      if (dateFilter) {
+        where.createdAt = dateFilter.createdAt;
+      }
+      if (q) {
+        where.OR = [
+          { text: { contains: q } },
+          { author: { fullName: { contains: q } } },
+          { listing: { title: { contains: q } } },
+        ];
+      }
+
+      const rows = await prisma.review.findMany({
+        where,
+        include: {
+          author: { select: { id: true, fullName: true, initials: true, role: true } },
+          listing: { select: { id: true, title: true, image: true, district: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 1000,
+      });
+
+      roomRows = rows.map((r) => ({
+        id: r.id,
+        reviewType: 'room',
+        reviewerId: r.authorId,
+        reviewerName: r.author?.fullName || '—',
+        reviewerInitials: r.author?.initials || '??',
+        reviewerRole: r.author?.role || null,
+        score: r.score,
+        title: null,
+        content: r.text,
+        status: r.hidden ? 'hidden' : 'published',
+        hiddenReason: r.hiddenReason,
+        adminReply: null,
+        createdAt: r.createdAt,
+        listing: r.listing
+          ? { id: r.listing.id, title: r.listing.title, image: r.listing.image, district: r.listing.district }
+          : null,
+        transaction: null,
+      }));
+    }
+
+    // ── Merge + sort + paginate ────────────────────────────────────────
+    const merged = [...websiteRows, ...roomRows].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const total = merged.length;
+    const totalPages = Math.max(1, Math.ceil(total / limitNum));
+    const safePage = Math.min(pageNum, totalPages);
+    const start = (safePage - 1) * limitNum;
+    const items = merged.slice(start, start + limitNum);
+
+    res.json({
+      reviews: items,
+      pagination: {
+        page: safePage,
+        limit: limitNum,
+        total,
+        totalPages,
+      },
+      counts: {
+        website: websiteRows.length,
+        room: roomRows.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// GET /api/admin/reviews/stats - Review statistics
+// ============================================
+router.get('/reviews/stats', async (req, res, next) => {
+  try {
+    const [websiteAggregate, roomTotal, roomHidden] = await Promise.all([
+      reviewHelper.getAggregate(),
+      prisma.review.count(),
+      prisma.review.count({ where: { hidden: true } }),
+    ]);
+
+    res.json({
+      website: {
+        average: websiteAggregate.average,
+        totalReviews: websiteAggregate.totalReviews,
+        distribution: websiteAggregate.distribution,
+        hiddenCount: websiteAggregate.hiddenCount,
+        flaggedCount: websiteAggregate.flaggedCount,
+      },
+      room: {
+        totalReviews: roomTotal,
+        hiddenCount: roomHidden,
       },
     });
   } catch (error) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { PieChart } from 'lucide-react'
 import {
@@ -19,8 +20,9 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { PortalSidebar, PageHeader } from '@/components/portal-sidebar'
 import { PortalShell } from '@/components/shells'
 import { formatVnd } from '@/lib/data'
-import { adminApi, notificationApi, authApi, type AdminDashboardStats, type Transaction, type AuditLog, type User as AdminUser, type Notification } from '@/lib/api'
+import { adminApi, notificationApi, authApi, type AdminDashboardStats, type Transaction, type AuditLog, type User as AdminUser, type Notification, type RevenueCategory, type FinanceChartPoint, type UserGrowthPoint, type ReviewActivityPoint } from '@/lib/api'
 import { useAuth } from '@/components/auth-provider'
+import { EmailChangeOtpDialog } from '@/components/email-change-otp-dialog'
 
 const chartConfig = {
   inflow: { label: 'Doanh thu VNPay', color: 'var(--chart-2)' },
@@ -39,6 +41,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           { href: '/admin/account-proposals', label: 'Đề xuất xử lý', hint: 3 },
           { href: '/admin/finance', label: 'Báo cáo tài chính' },
           { href: '/admin/finance/transactions', label: 'Giao dịch' },
+          { href: '/admin/reviews', label: 'Lịch sử đánh giá' },
           { href: '/admin/audit', label: 'Nhật ký hệ thống' },
           { href: '/admin/config', label: 'Cấu hình hệ thống' },
           { href: '/admin/notifications', label: 'Thông báo' },
@@ -156,6 +159,18 @@ export function UserManagementPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterRole, setFilterRole] = useState('')
+
+  // ── Task 6: the dashboard links here with ?role=tenant|seller|manager ──
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const role = searchParams?.get('role')
+    if (!role) return
+    // Only accept roles the backend understands, so a hand-crafted URL
+    // cannot inject an arbitrary filter value.
+    if (!['tenant', 'seller', 'manager', 'admin'].includes(role)) return
+    setFilterRole(role)
+  }, [searchParams])
 
   useEffect(() => {
     adminApi.getUsers({ search: search || undefined, role: filterRole || undefined })
@@ -323,7 +338,8 @@ export function FinanceHub() {
   const [chartLoading, setChartLoading] = useState(true)
   
   // Sources
-  const [sources, setSources] = useState<Array<{ type: string; total: number; count: number; percentage: number }>>([])
+  const [sources, setSources] = useState<RevenueCategory[]>([])
+  const [nonRevenueSources, setNonRevenueSources] = useState<RevenueCategory[]>([])
 
   // Calculate success rate
   const successRate = overview && overview.transactionCount > 0
@@ -360,7 +376,8 @@ export function FinanceHub() {
   const fetchSources = async () => {
     try {
       const data = await adminApi.getFinanceSources()
-      setSources(data)
+      setSources(data.revenue ?? [])
+      setNonRevenueSources(data.nonRevenue ?? [])
     } catch (e) {
       console.error('Failed to fetch sources:', e)
     }
@@ -751,9 +768,9 @@ export function FinanceHub() {
             ) : (
               <div className="space-y-3">
                 {sources.map((s) => (
-                  <div key={s.type} className="space-y-1">
+                  <div key={s.category} className="space-y-1">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium capitalize">{s.type}</span>
+                      <span className="font-medium">{s.label ?? s.category}</span>
                       <span className="font-mono font-bold">{formatVnd(s.total)}</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[#F5F5F0]">
@@ -2302,6 +2319,10 @@ export function AdminProfilePage() {
   const [phone, setPhone] = useState(user?.phone || '')
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileSuccess, setProfileSuccess] = useState(false)
+
+  // E-mail change confirmation (OTP sent to the NEW address)
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
+  const [resendAvailableIn, setResendAvailableIn] = useState(60)
   
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('')
@@ -2337,6 +2358,14 @@ export function AdminProfilePage() {
     
     try {
       const result = await authApi.updateProfile({ fullName, email })
+      // An e-mail change is not applied immediately: the backend sends an OTP
+      // to the NEW address and only updates the record once it is confirmed.
+      if (result.requiresEmailConfirmation && result.pendingEmail) {
+        setPendingEmail(result.pendingEmail)
+        setResendAvailableIn(result.resendAvailableIn || 60)
+        setEmail(user?.email || '')
+        return
+      }
       updateAccount(user!.id, result.user)
       setProfileSuccess(true)
       setTimeout(() => setProfileSuccess(false), 3000)
@@ -2501,7 +2530,26 @@ export function AdminProfilePage() {
               </form>
             </CardContent>
           </Card>
-          
+
+          {/* E-mail change confirmation */}
+          {pendingEmail && (
+            <EmailChangeOtpDialog
+              pendingEmail={pendingEmail}
+              resendAvailableIn={resendAvailableIn}
+              onVerified={(newEmail) => {
+                setPendingEmail(null)
+                setEmail(newEmail)
+                if (user) updateAccount(user.id, { email: newEmail })
+                setProfileSuccess(true)
+                setTimeout(() => setProfileSuccess(false), 3000)
+              }}
+              onCancel={() => {
+                setPendingEmail(null)
+                setEmail(user?.email || '')
+              }}
+            />
+          )}
+
           {/* Security Card */}
           <Card className="rounded-xl border-2 border-[#151515] bg-white shadow-[3px_3px_0_#151515]">
             <CardHeader className="border-b-2 border-[#151515]/10">

@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense, useEffect, useState } from 'react'
-import { ArrowRight, BadgeCheck, CheckCircle2, Eye, EyeOff, Lock, MapPin, Phone, ShieldCheck, Star, User } from 'lucide-react'
+import { ArrowRight, BadgeCheck, CheckCircle2, Eye, EyeOff, Lock, MapPin, ShieldCheck, Star, User, UserRound } from 'lucide-react'
 import { BrutalHeader } from '@/components/brutal-header'
 import { useAuth } from '@/components/auth-provider'
 import { ROLE_HOME, ROLE_PREFIX, DEMO_ACCOUNTS, toSession, type Role } from '@/lib/auth'
@@ -39,12 +39,22 @@ function LoginInner() {
   const router = useRouter()
   const params = useSearchParams()
   const { user, ready, login } = useAuth()
-  const [phone, setPhone] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendIn, setResendIn] = useState(0)
   const next = params.get('next') || ''
+
+  // Resend cooldown countdown (mirrors the backend cooldown).
+  useEffect(() => {
+    if (resendIn <= 0) return
+    const t = setTimeout(() => setResendIn((s) => Math.max(0, s - 1)), 1000)
+    return () => clearTimeout(t)
+  }, [resendIn])
 
   useEffect(() => {
     document.body.style.overflow = 'auto'
@@ -66,14 +76,15 @@ function LoginInner() {
   }, [ready, user, next, pathname, router, redirecting])
 
   const onLogin = async () => {
-    if (!phone.trim()) return setError('Vui lòng nhập số điện thoại.')
+    const clean = identifier.trim()
+    if (!clean) return setError('Vui lòng nhập số điện thoại hoặc email.')
     if (!password) return setError('Vui lòng nhập mật khẩu.')
-    
+
     setError('')
     setLoading(true)
-    
+
     try {
-      const { user: apiUser, token } = await authApi.login(phone.replace(/\s/g, ''), password)
+      const { user: apiUser, token } = await authApi.login(clean, password)
       localStorage.setItem('token', token)
       const sessionUser = {
         id: apiUser.id,
@@ -94,21 +105,59 @@ function LoginInner() {
     } catch (err) {
       setLoading(false)
       if (err instanceof Error && 'status' in err) {
-        const apiErr = err as { status: number; data?: { retryAfter?: number; error?: string } }
-        
+        const apiErr = err as {
+          status: number
+          data?: {
+            retryAfter?: number
+            error?: string
+            code?: string
+            requiresVerification?: boolean
+            email?: string
+          }
+        }
+
         if (apiErr.status === 429) {
           const retryAfter = apiErr.data?.retryAfter ?? 900
           setError(`Quá nhiều lần đăng nhập. Vui lòng chờ ${retryAfter} giây.`)
           return
         }
-        
+
         if (apiErr.status === 408) {
           setError('Yêu cầu hết thời gian. Vui lòng thử lại.')
           return
         }
+
+        // ── Task 7: the account exists but the e-mail is not proven yet ──
+        if (apiErr.status === 403 && apiErr.data?.requiresVerification) {
+          setPendingEmail(apiErr.data.email ?? '')
+          setError(
+            apiErr.data.error || 'Vui lòng xác thực email trước khi đăng nhập.'
+          )
+          return
+        }
       }
-      
-      setError('Số điện thoại hoặc mật khẩu không đúng.')
+
+      setError('Số điện thoại/email hoặc mật khẩu không chính xác.')
+    }
+  }
+
+  // ── Task 7: re-send the verification OTP for an unverified account ────
+  const onResendVerification = async () => {
+    if (!pendingEmail || resendIn > 0 || resendLoading) return
+    setResendLoading(true)
+    try {
+      const res = await authApi.resendVerification({ email: pendingEmail })
+      if (res.alreadyVerified) {
+        setPendingEmail('')
+        setError('Email đã được xác thực. Vui lòng đăng nhập.')
+      } else {
+        setError(res.message || 'Đã gửi lại mã xác thực.')
+        setResendIn(res.resendAvailableIn || 60)
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể gửi lại mã. Vui lòng thử lại.')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -136,21 +185,25 @@ function LoginInner() {
 
             <div className="rounded-2xl border-[3px] border-[#151515] bg-[#F5F5F0] p-5 shadow-[5px_5px_0_#151515]">
               
-              {/* Phone Field */}
+              {/* Identifier Field — phone number OR e-mail address */}
               <div className="mb-4">
                 <label className="mb-1.5 block text-sm font-bold text-[#151515]">
-                  Số điện thoại
+                  Số điện thoại hoặc Email
                 </label>
                 <div className="relative">
-                  <Phone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+                  <UserRound className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
                   <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && onLogin()}
                     className="h-12 w-full rounded-xl border-[2px] border-[#151515] bg-white pl-11 pr-4 text-sm shadow-[2px_2px_0_#151515] focus:border-[#FDE047] focus:outline-none focus:ring-[3px] focus:ring-[#FDE047]/30"
-                    placeholder="Nhập số điện thoại..."
-                    autoComplete="tel"
+                    placeholder="Nhập số điện thoại hoặc email"
+                    autoComplete="username"
+                    inputMode="text"
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    autoCorrect="off"
                   />
                 </div>
               </div>
@@ -190,13 +243,55 @@ function LoginInner() {
                 </div>
               )}
 
+              {/* ── Task 7: unverified account gate ───────────────────────── */}
+              {pendingEmail && (
+                <div className="mb-4 rounded-xl border-[2px] border-[#FDE047] bg-[#FDE047]/20 p-4">
+                  <div className="flex items-start gap-2">
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#151515]" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-[#151515]">
+                        Chưa xác thực email
+                      </p>
+                      <p className="mt-1 text-sm text-[#151515]/70">
+                        Tài khoản <b className="break-all">{pendingEmail}</b> chưa được
+                        xác thực. Vui lòng nhập mã 6 chữ số đã gửi tới email để tiếp tục.
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <Link
+                          href={`/xac-thuc-email?email=${encodeURIComponent(pendingEmail)}`}
+                          className="inline-flex h-9 items-center rounded-lg border-[2px] border-[#151515] bg-white px-3 text-sm font-bold text-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]"
+                        >
+                          Nhập mã xác thực
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={onResendVerification}
+                          disabled={resendIn > 0 || resendLoading}
+                          className="text-sm font-bold text-[#059669] disabled:cursor-not-allowed disabled:text-[#151515]/35 hover:underline"
+                        >
+                          {resendIn > 0
+                            ? `Gửi lại sau ${resendIn}s`
+                            : resendLoading
+                              ? 'Đang gửi...'
+                              : 'Gửi lại mã'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Links */}
               <div className="mb-4 flex items-center justify-between text-sm">
-                <span className="text-[#151515]/60">
-                  Quên mật khẩu? Liên hệ hỗ trợ.
-                </span>
-                <Link 
-                  href="/dang-ky" 
+                <Link
+                  href="/quen-mat-khau"
+                  className="font-bold text-[#059669] hover:underline"
+                >
+                  Quên mật khẩu?
+                </Link>
+                <Link
+                  href="/dang-ky"
                   className="font-bold text-[#059669] hover:underline"
                 >
                   Đăng ký →

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
-import { ExecutiveOverview } from '@/components/admin-portal'
+import AdminDashboard from '@/components/admin-dashboard'
 
 export default function AdminOverviewPage() {
-  return <ExecutiveOverview />
+  return <AdminDashboard />
 }

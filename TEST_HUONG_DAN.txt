@@ -1,125 +1,282 @@
-# HƯỚNG DẪN TEST WEBSITE VERIRENT
+# HƯỚNG DẪN TEST WEBSITE VERIRENT - PHIÊN BẢN THUYẾT TRÌNH
 
-## TRƯỚC KHI TEST
+---
 
-### 1. Khởi động Backend
+## 🟢 BƯỚC 1: KHỞI ĐỘNG HỆ THỐNG
+
+### 1.1 Mở Terminal Backend
 ```bash
 cd D:\WEB khai\web\backend
 npm run dev
 ```
+→ Chờ thấy dòng: `Server running on port 3001` (hoặc 3005)
 
-### 2. Khởi động Frontend
+### 1.2 Mở Terminal Frontend
 ```bash
 cd D:\WEB khai\web
 npm run dev
 ```
+→ Chờ thấy dòng: `Ready - started server on http://localhost:3000`
+
+### 1.3 Mở trình duyệt
+Truy cập: **http://localhost:3000**
 
 ---
 
-## LUỒNG TEST 1: BỘ LỌC TÌM KIẾM (Trang /tim-kiem)
+## 🟢 BƯỚC 2: LUỒNG TÌM KIẾM PHÒNG TRỌ
 
-### Bước 1: Mở trang tìm kiếm
-- Truy cập: http://localhost:3000/tim-kiem
+### 2.1 Vào trang tìm kiếm
+- Click menu **"Tìm kiếm"** hoặc truy cập `/tim-kiem`
 
-### Bước 2: Test bộ lọc "Đã xác minh"
-1. Click vào toggle "Đã xác minh" (ô vuông bên cạnh)
-2. → Chờ kết quả load
-3. → KIỂM TRA: Chỉ hiện các tin có badge "Đã xác minh" màu vàng
-4. → Tắt toggle → hiện tất cả tin
+### 2.2 Test bộ lọc "ĐÃ XÁC MINH"
+**Mục đích:** Lọc hiện tin đã được xác minh (có badge vàng)
 
-### Bước 3: Test bộ lọc "Trống ngay"
-1. Click vào toggle "Trống ngay"
-2. → KIỂM TRA: Chỉ hiện các tin có trạng thái "Trống ngay"
-3. → Tắt toggle → hiện tất cả tin (kể cả đã cho thuê)
+**Các bước thực hiện:**
+1. Tìm ô checkbox/toggle **"Đã xác minh"**
+2. Click để BẬT (tick vào)
+3. Quan sát:
+   - ✅ Các tin hiện ra phải có **badge màu VÀNG** ghi "Đã xác minh"
+   - ✅ Các tin không có badge vàng sẽ biến mất
+4. Click lại để TẮT → hiện lại tất cả tin
 
-### Bước 4: Test kết hợp cả 2 bộ lọc
-1. Bật cả 2 toggle
-2. → KIỂM TRA: Hiện tin vừa "Đã xác minh" VÀ "Trống ngay"
+### 2.3 Test bộ lọc "TRỐNG NGAY"
+**Mục đích:** Lọc hiện phòng đang trống, có thể chuyển vào ở ngay
 
----
+**Các bước thực hiện:**
+1. Tìm ô checkbox/toggle **"Trống ngay"**
+2. Click để BẬT
+3. Quan sát:
+   - ✅ Chỉ hiện các phòng **sẵn sàng cho thuê**
+   - ✅ Các phòng đã có người thuê sẽ biến mất
 
-## LUỒNG TEST 2: TRANG CHI TIẾT PHÒNG (Trang /phong/[id])
+### 2.4 Test kết hợp 2 bộ lọc
+1. Bật **Đã xác minh** + **Trống ngay** cùng lúc
+2. Quan sát:
+   - ✅ Chỉ hiện phòng VỪA đã xác minh VỪA đang trống
 
-### Bước 1: Mở trang chi tiết
-- Từ trang tìm kiếm, click vào 1 tin bất kỳ
-
-### Bước 2: Test nút TIM LƯU TIN
-1. **Chưa đăng nhập:**
-   - Click vào icon tim (♡)
-   - → HIỂN THỊ: Alert "Vui lòng đăng nhập để lưu tin!"
-
-2. **Đăng nhập:**
-   - Đăng nhập với tài khoản tenant
-   - Quay lại trang chi tiết
-   - Click icon tim:
-     - → TIM ĐỔI MÀU ĐỎ (♡ → ♥)
-     - → CÓ ANIMATION nhấn
-   - Click lại:
-     - → TIM TRỞ LẠI MÀU TRẮNG (♥ → ♡)
-
-### Bước 3: Kiểm tra Badge VIP (màu xanh)
-1. Tìm 1 tin có badge ⭐ VIP
-2. → KIỂM TRA: Badge VIP màu XANH LÁ (#10b981 → #22c55e)
-   - KHÔNG phải màu hồng!
-   - Có viền đen
-   - Có shadow glow xanh
-
-### Bước 4: Kiểm tra Badge Đã xác minh
-1. Tìm 1 tin có badge "Đã xác minh"
-2. → KIỂM TRA: Badge màu VÀNG (#FDE047)
-3. → Có icon BadgeCheck
+### 2.5 Check lỗi
+→ **Kiểm tra Console trình duyệt (F12):**
+- ❌ Không được có lỗi màu đỏ
+- ✅ Chỉ hiện thông tin như `Fetching...`, `Loaded X results`
 
 ---
 
-## LUỒNG TEST 3: TRANG TÀI KHOẢN - TIN ĐÃ LƯU (/tai-khoan/da-luu)
+## 🟢 BƯỚC 3: LUỒNG XEM CHI TIẾT PHÒNG
 
-### Bước 1: Kiểm tra tin đã lưu
-1. Đăng nhập với tài khoản tenant
-2. Truy cập: http://localhost:3000/tai-khoan/da-luu
-3. → KIỂM TRA: Hiện danh sách tin đã lưu
-4. → Nhấn tim ở trang chi tiết → tin xuất hiện ở đây
+### 3.1 Chọn 1 phòng để xem
+- Từ trang tìm kiếm, **click vào 1 tin bất kỳ**
+
+### 3.2 Kiểm tra badge VIP (màu XANH)
+**Mục đích:** Tin VIP phải nổi bật với màu xanh lá
+
+**Quan sát trên trang chi tiết:**
+- ✅ Nếu phòng là VIP → có **badge ⭐ VIP màu XANH LÁ**
+  - Màu gradient từ `#10b981` đến `#22c55e`
+  - Có viền đen chắc chắn
+  - Có bóng sáng xanh phát sáng
+- ❌ **KHÔNG được** màu hồng!
+
+### 3.3 Kiểm tra badge "ĐÃ XÁC MINH" (màu VÀNG)
+- ✅ Badge màu **VÀNG** (#FDE047)
+- ✅ Có icon ✓ (BadgeCheck)
+
+### 3.4 Test nút TIM (LƯU TIN) ❤️
+**Mục đích:** Người dùng có thể lưu phòng yêu thích
+
+#### Trường hợp A: CHƯA ĐĂNG NHẬP
+1. Click vào **icon tim (♡)**
+2. Quan sát:
+   - ✅ Hiện thông báo: **"Vui lòng đăng nhập để lưu tin!"**
+
+#### Trường hợp B: ĐÃ ĐĂNG NHẬP (tài khoản tenant)
+1. **Đăng nhập** với tài khoản tenant:
+   - Email: `tenant@test.com`
+   - Password: `123456`
+2. Quay lại trang chi tiết phòng
+3. Click **icon tim (♡)**:
+   - ✅ Tim chuyển thành **màu ĐỎ (♥)**
+   - ✅ Có animation nhấn đẹp mắt
+4. Click lại lần nữa:
+   - ✅ Tim trở về **màu TRẮNG (♡)**
+
+### 3.5 Kiểm tra thông tin phòng
+- ✅ Hình ảnh phòng hiển thị đẹp
+- ✅ Thông tin: giá thuê, diện tích, địa chỉ
+- ✅ Tiện ích: wifi, điều hòa, nước nóng...
+- ✅ Số điện thoại liên hệ
 
 ---
 
-## CHECKLIST TEST
+## 🟢 BƯỚC 4: LUỒNG ĐÁNH GIÁ PHÒNG (RATING)
 
-### ✅ BỘ LỌC TÌM KIẾM
-- [ ] Toggle "Đã xác minh" hoạt động
-- [ ] Toggle "Trống ngay" hoạt động  
-- [ ] Không có lỗi console khi bật/tắt
+### 4.1 Điều kiện để đánh giá
+- Người dùng phải có lịch hẹn xem phòng **ĐÃ HOÀN THÀNH**
+- Hoặc đã từng **thuê phòng** đó
 
-### ✅ TRANG CHI TIẾT
-- [ ] Badge VIP màu XANH (không hồng)
-- [ ] Nút tim lưu/bỏ lưu hoạt động
-- [ ] Icon tim đổi màu khi lưu
-- [ ] Alert khi chưa đăng nhập
+### 4.2 Cách test đánh giá
+**Từ tài khoản tenant đã đăng nhập:**
 
-### ✅ TRANG TÀI KHOẢN
-- [ ] Danh sách tin đã lưu hiển thị đúng
+1. Vào **"Tài khoản"** → **"Lịch hẹn"**
+2. Chọn 1 lịch hẹn có trạng thái **"Đã xem"** hoặc **"Hoàn thành"**
+3. Click nút **"Đánh giá"**
+4. **Điền thông tin đánh giá:**
+   - ⭐ Chọn số sao (1-5 sao)
+   - ✏️ Viết nhận xét về phòng
+5. Click **"Gửi đánh giá"**
+6. Quan sát:
+   - ✅ Hiện thông báo: "Đánh giá thành công!"
+   - ✅ Số sao hiển thị bên dưới thông tin phòng
+
+### 4.3 Xem đánh giá
+1. Vào trang chi tiết phòng
+2. Kéo xuống phần **"Đánh giá"**
+3. Quan sát:
+   - ✅ Hiện avatar (hình đại diện) người đánh giá
+   - ✅ Hiện số sao đã chọn (⭐⭐⭐⭐⭐)
+   - ✅ Hiện nội dung nhận xét
+   - ✅ Hiện ngày đánh giá
+
+### 4.4 Các lỗi cần tránh
+- ❌ Không cho đánh giá khi chưa có lịch hẹn
+- ❌ Không cho đánh giá 2 lần cùng 1 phòng
+- ❌ Không hiện sao lẻ (phải hiện số thập phân VD: 4.5 sao)
 
 ---
 
-## CÁC LỖI ĐÃ FIX (ĐỂ TESTER BIẾT)
+## 🟢 BƯỚC 5: LUỒNG TÀI KHOẢN
 
-1. **Bug bộ lọc:** Backend mặc định `vacantNow = true` → luôn lọc trống ngay
-   - Fix: Bỏ default, chỉ lọc khi user bật toggle
+### 5.1 Xem danh sách tin đã lưu
+1. **Đăng nhập** với tài khoản tenant
+2. Vào **"Tài khoản"** → **"Đã lưu"** (hoặc `/tai-khoan/da-luu`)
+3. Quan sát:
+   - ✅ Danh sách các phòng đã nhấn tim ở bước 3.4
+   - ✅ Mỗi tin hiển thị: hình, tên, giá, địa chỉ
+4. Click vào 1 tin:
+   - ✅ Chuyển sang trang chi tiết phòng
 
-2. **Bug bộ lọc:** Backend không nhận param `verified`
-   - Fix: Thêm parse verified từ query
-
-3. **Bug boolean:** API gửi string "true" thay vì boolean
-   - Fix: Backend parse string thành boolean
-
-4. **Bug VIP:** Badge VIP hiện màu hồng thay vì xanh
-   - Fix: Dùng inline style background thay vì Tailwind gradient
-
-5. **Thiếu chức năng:** Trang chi tiết không có nút lưu tin
-   - Fix: Thêm nút tim với logic save/unsave
+### 5.2 Bỏ lưu tin
+1. Ở trang **"Đã lưu"**, click **icon tim** của 1 tin
+2. Quan sát:
+   - ✅ Tin biến mất khỏi danh sách "Đã lưu"
+   - ✅ Toast thông báo: "Đã bỏ lưu tin"
 
 ---
 
-## MÔI TRƯỜNG TEST
-- Backend: http://localhost:3001
-- Frontend: http://localhost:3000
-- Database: SQLite (dev.db)
-- Framework: Next.js 16 + Prisma
+## 🟢 BƯỚC 6: LUỒNG ĐĂNG KÝ / ĐĂNG NHẬP
+
+### 6.1 Đăng ký tài khoản mới
+1. Click **"Đăng ký"** (hoặc `/dang-ky`)
+2. **Điền thông tin:**
+   - Họ tên: Nguyễn Văn A
+   - Email: testnew@mail.com
+   - Số điện thoại: 0912345678
+   - Mật khẩu: 123456
+   - Xác nhận mật khẩu: 123456
+3. Click **"Đăng ký"**
+4. Quan sát:
+   - ✅ Đăng ký thành công
+   - ✅ Tự động đăng nhập
+   - ✅ Chuyển về trang chủ
+
+### 6.2 Đăng nhập
+1. Click **"Đăng nhập"** (hoặc `/dang-nhap`)
+2. **Điền thông tin:**
+   - Email: tenant@test.com
+   - Mật khẩu: 123456
+3. Click **"Đăng nhập"**
+4. Quan sát:
+   - ✅ Đăng nhập thành công
+   - ✅ Header hiện tên user
+   - ✅ Hiện menu "Tài khoản"
+
+### 6.3 Đăng xuất
+1. Vào **"Tài khoản"** → **"Đăng xuất"**
+2. Quan sát:
+   - ✅ Xóa phiên đăng nhập
+   - ✅ Quay về trang chủ
+   - ✅ Header không hiện tên user nữa
+
+---
+
+## 📋 CHECKLIST TEST - PHIÊN BẢN DỄ HIỂU
+
+### PHẦN TÌM KIẾM
+- [ ] Bật "Đã xác minh" → Chỉ hiện tin có badge vàng ✅
+- [ ] Bật "Trống ngay" → Chỉ hiện phòng trống ✅
+- [ ] Bật cả 2 → Chỉ hiện tin vừa xác minh vừa trống ✅
+- [ ] Tắt bộ lọc → Hiện tất cả tin ✅
+- [ ] Không có lỗi đỏ trong console ✅
+
+### PHẦN CHI TIẾT PHÒNG
+- [ ] Badge VIP màu XANH LÁ (không phải hồng!) ✅
+- [ ] Badge "Đã xác minh" màu VÀNG ✅
+- [ ] Nút tim hiện ở header phòng ✅
+- [ ] Chưa đăng nhập → bấm tim hiện thông báo ✅
+- [ ] Đã đăng nhập → bấm tim đổi màu đỏ ✅
+- [ ] Bấm lại tim → bỏ lưu, tim trắng lại ✅
+
+### PHẦN ĐÁNH GIÁ
+- [ ] Có lịch hẹn đã xem → thấy nút "Đánh giá" ✅
+- [ ] Chọn sao và viết nhận xét → gửi được ✅
+- [ ] Đánh giá thành công → hiện thông báo ✅
+- [ ] Đánh giá hiện bên dưới thông tin phòng ✅
+
+### PHẦN TÀI KHOẢN
+- [ ] Xem danh sách tin đã lưu ✅
+- [ ] Bỏ lưu tin → tin biến mất ✅
+- [ ] Đăng ký tài khoản mới thành công ✅
+- [ ] Đăng nhập/đăng xuất hoạt động ✅
+
+---
+
+## 🐛 CÁC LỖI ĐÃ SỬA (ĐỂ TRÌNH BÀY)
+
+### 1. Lỗi bộ lọc "Trống ngay"
+- **Trước:** Luôn hiện phòng trống, không tắt được
+- **Nguyên nhân:** Backend mặc định bật sẵn
+- **Sửa:** Chỉ lọc khi người dùng bật toggle
+
+### 2. Lỗi bộ lọc "Đã xác minh"
+- **Trước:** Bấm toggle không hoạt động
+- **Nguyên nhân:** Backend không nhận tham số
+- **Sửa:** Thêm xử lý nhận param verified
+
+### 3. Lỗi màu badge VIP
+- **Trước:** Badge VIP màu HỒNG (sai thiết kế)
+- **Sửa:** Đổi sang màu XANH LÁ theo yêu cầu
+
+### 4. Thiếu nút lưu tin
+- **Trước:** Trang chi tiết không có nút tim
+- **Sửa:** Thêm nút tim với logic lưu/bỏ lưu
+
+### 5. Lỗi gửi dữ liệu boolean
+- **Trước:** Gửi string "true" thay vì boolean
+- **Sửa:** Backend tự parse string thành boolean
+
+---
+
+## 📝 GHI CHÚ KHI THUYẾT TRÌNH
+
+### Khi demo bộ lọc:
+> "Người dùng có thể lọc theo 2 tiêu chí: phòng đã được xác minh bởi hệ thống, và phòng đang trống có thể chuyển vào ở ngay. Có thể kết hợp cả 2 bộ lọc để tìm phòng tốt nhất."
+
+### Khi demo nút tim:
+> "Tính năng lưu tin cho phép người dùng đánh dấu những phòng yêu thích. Danh sách đã lưu xem lại bất cứ lúc nào ở trang Tài khoản."
+
+### Khi demo đánh giá:
+> "Người dùng chỉ có thể đánh giá sau khi đã xem phòng thực tế qua lịch hẹn. Điều này đảm bảo đánh giá chính xác và trung thực."
+
+---
+
+## 🔗 THÔNG TIN HỆ THỐNG
+
+| Thành phần | Môi trường | URL |
+|------------|-------------|-----|
+| Frontend (dev) | Local | http://localhost:3000 |
+| Backend (dev) | Local | http://localhost:3005 |
+| Backend (production) | Render | https://thiennhantrudo-be.onrender.com |
+| Database | MongoDB Atlas | Cloud |
+
+---
+
+**Chúc bạn thuyết trình thành công! 🎉**

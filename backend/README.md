@@ -39,7 +39,8 @@ Server sẽ chạy tại **http://localhost:3001**
 | Manager | `0909000111` | `manager123` |
 | Admin | `0908000222` | `admin123` |
 
-**OTP:** `123456` (dùng chung)
+**OTP:** Không có mã OTP cố định. Mã được sinh ngẫu nhiên bằng CSPRNG, chỉ gửi qua
+email (Resend) và chỉ hiển thị ở console khi chạy local mà chưa cấu hình `RESEND_API_KEY`.
 
 ## API Endpoints
 
@@ -47,13 +48,16 @@ Server sẽ chạy tại **http://localhost:3001**
 
 | Method | Endpoint | Mô tả |
 |--------|----------|--------|
-| POST | `/register` | Đăng ký tài khoản mới |
-| POST | `/login` | Đăng nhập bằng phone + password |
-| POST | `/otp/send` | Gửi mã OTP |
-| POST | `/otp/verify` | Xác thực OTP |
+| POST | `/register` | Đăng ký tài khoản mới (gửi OTP xác thực email, chưa cấp token) |
+| POST | `/verify-email` | Xác thực email bằng OTP → cấp token đăng nhập |
+| POST | `/resend-verification` | Gửi lại OTP xác thực (có cooldown 60s) |
+| POST | `/login` | Đăng nhập bằng phone + password (từ chối tài khoản chưa xác thực email) |
+| POST | `/forgot-password` | Gửi OTP đặt lại mật khẩu theo **email** (không tiết lộ tài khoản tồn tại) |
+| POST | `/reset-password` | Đặt lại mật khẩu bằng OTP → vô hiệu hoá mọi phiên cũ (nhận `email` + `otp` + `newPassword`) |
+| POST | `/resend-password-reset` | Gửi lại OTP đặt lại mật khẩu (nhận `email`) |
 | GET | `/me` | Lấy thông tin user hiện tại |
 | PUT | `/profile` | Cập nhật profile |
-| PUT | `/password` | Đổi mật khẩu |
+| PUT | `/password` | Đổi mật khẩu (cần mật khẩu hiện tại) → vô hiệu hoá mọi phiên khác |
 | POST | `/logout` | Đăng xuất |
 
 ### Listings (`/api/listings`)
@@ -168,5 +172,11 @@ Authorization: Bearer <token>
 | `JWT_SECRET` | (required) | Secret key cho JWT |
 | `JWT_EXPIRES_IN` | 7d | Thời hạn token |
 | `DATABASE_URL` | file:./dev.db | SQLite database path |
-| `DEMO_OTP` | 123456 | Mã OTP demo |
+| `OTP_SECRET` | (fallback `JWT_SECRET`) | Secret HMAC cho digest OTP |
+| `OTP_TTL_SECONDS` | 600 | Thời hạn OTP (10 phút) |
+| `OTP_RESEND_COOLDOWN_SECONDS` | 60 | Cooldown gửi lại OTP |
+| `OTP_MAX_ATTEMPTS` | 5 | Số lần thử sai tối đa mỗi OTP |
+| `OTP_MAX_SENDS_PER_HOUR` | 5 | Số lần gửi OTP tối đa mỗi email mỗi giờ |
+| `RESEND_API_KEY` | — | **Bắt buộc khi production** — API key của Resend để gửi email OTP |
+| `RESEND_FROM_EMAIL` | no-reply@thiennhan.vn | Địa chỉ người gửi email |
 | `FRONTEND_URL` | http://localhost:3000 | URL frontend (CORS) |

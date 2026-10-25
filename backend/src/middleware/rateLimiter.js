@@ -88,9 +88,49 @@ const registerRateLimiter = createRateLimiter({
   name: 'REGISTER_RATE_LIMIT',
 })
 
+// ── OTP / e-mail verification limiters (Task 7) ────────────────────────────
+// Sending an OTP is the most abuse-prone operation in the auth flow, so it
+// gets the tightest limits: few attempts per IP, and a separate limiter keyed
+// by the target e-mail so one attacker cannot lock out a real user by
+// spamming their inbox (the OTP helper additionally enforces a per-e-mail
+// hourly send cap and a resend cooldown).
+const otpSendRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 OTP sends per IP per 15 minutes
+  key: req => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+  name: 'OTP_SEND_RATE_LIMIT',
+})
+
+const otpVerifyRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 verification attempts per IP per 15 minutes
+  key: req => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+  name: 'OTP_VERIFY_RATE_LIMIT',
+})
+
+// Password reset request — keyed by IP.
+const forgotPasswordRateLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 reset requests per IP per hour
+  key: req => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+  name: 'FORGOT_PASSWORD_RATE_LIMIT',
+})
+
+// Password reset completion — keyed by IP.
+const resetPasswordRateLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 reset completions per IP per hour
+  key: req => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+  name: 'RESET_PASSWORD_RATE_LIMIT',
+})
+
 module.exports = {
   createRateLimiter,
   authRateLimiter,
   verifyRateLimiter,
   registerRateLimiter,
+  otpSendRateLimiter,
+  otpVerifyRateLimiter,
+  forgotPasswordRateLimiter,
+  resetPasswordRateLimiter,
 }

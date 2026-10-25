@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, Clock, XCircle, 
   RefreshCw, ExternalLink, ChevronLeft, ChevronRight,
@@ -154,6 +154,34 @@ export default function TransactionManagementPage() {
   })
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
+  // ── Task 6: deep links from the dashboard carry the filter in the URL ──
+  // e.g. /admin/finance/transactions?startDate=2026-01-01&endDate=2026-01-31&status=completed
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const sp = searchParams
+    if (!sp) return
+
+    const next: Partial<TransactionFilters> = {}
+    const status = sp.get('status')
+    const type = sp.get('type')
+    const startDate = sp.get('startDate')
+    const endDate = sp.get('endDate')
+    const search = sp.get('search')
+
+    if (status) next.status = status
+    if (type) next.type = type
+    if (startDate) next.startDate = startDate
+    if (endDate) next.endDate = endDate
+    if (search) next.search = search
+
+    if (Object.keys(next).length > 0) {
+      setFilters((f) => ({ ...f, ...next }))
+      // Any deep link resets pagination — the result set is different.
+      setPagination((p) => ({ ...p, page: 1 }))
+    }
+  }, [searchParams])
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(filters.search), 400)
@@ -169,6 +197,8 @@ export default function TransactionManagementPage() {
         search: debouncedSearch || undefined,
         status: filters.status || undefined,
         type: filters.type || undefined,
+        startDate: filters.startDate || undefined,
+        endDate: filters.endDate || undefined,
         page: pagination.page,
         limit: 20,
       })
@@ -180,7 +210,7 @@ export default function TransactionManagementPage() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, filters.status, filters.type, pagination.page])
+  }, [debouncedSearch, filters.status, filters.type, filters.startDate, filters.endDate, pagination.page])
 
   // Fetch stats from overview API
   const fetchStats = useCallback(async () => {

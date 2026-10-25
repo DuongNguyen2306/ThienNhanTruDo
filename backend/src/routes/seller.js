@@ -12,7 +12,7 @@ router.use(authenticate);
 router.use(authorize('seller'));
 
 // API base URL for file URLs (frontend-served files need full URL)
-const API_BASE = process.env.API_BASE_URL || 'http://localhost:3005';
+const API_BASE = process.env.API_BASE_URL || 'https://thiennhantrudo-be.onrender.com';
 
 // ============================================
 // GET /api/seller/listings - My listings

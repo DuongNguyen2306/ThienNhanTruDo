@@ -1,0 +1,54 @@
+npm notice run my-project@0.1.0 dev
+npm notice run next dev
+⚠ Fast Refresh had to perform a full reload when ./lib/api.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⚠ Fast Refresh had to perform a full reload when ./lib/api.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⚠ Fast Refresh had to perform a full reload when ./lib/api.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⚠ Fast Refresh had to perform a full reload when ./app/dang-nhap/ClientPage.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⨯ ReferenceError: Phone is not defined
+    at LoginInner (app\dang-nhap\ClientPage.tsx:193:20)
+  191 |                 </label>
+  192 |                 <div className="relative">
+> 193 |                   <Phone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+      |                    ^
+  194 |                   <input
+  195 |                     type="tel"
+  196 |                     value={phone} {
+  digest: '861231005'
+}
+⚠ Fast Refresh had to perform a full reload when ./app/dang-nhap/ClientPage.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⨯ ReferenceError: Phone is not defined
+    at LoginInner (app\dang-nhap\ClientPage.tsx:193:20)
+  191 |                 </label>
+  192 |                 <div className="relative">
+> 193 |                   <Phone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+      |                    ^
+  194 |                   <input
+  195 |                     type="tel"
+  196 |                     value={phone} {
+  digest: '861231005'
+}
+⚠ Fast Refresh had to perform a full reload when ./app/dang-nhap/ClientPage.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⨯ ReferenceError: Phone is not defined
+    at LoginInner (app\dang-nhap\ClientPage.tsx:194:20)
+  192 |                 </label>
+  193 |                 <div className="relative">
+> 194 |                   <Phone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+      |                    ^
+  195 |                   <input
+  196 |                     type="tel"
+  197 |                     value={phone} {
+  digest: '861231005'
+}
+⚠ Fast Refresh had to perform a full reload when ./app/dang-nhap/ClientPage.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⨯ ReferenceError: Phone is not defined
+    at LoginInner (app\dang-nhap\ClientPage.tsx:194:20)
+  192 |                 </label>
+  193 |                 <div className="relative">
+> 194 |                   <Phone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-[#151515]/40" />
+      |                    ^
+  195 |                   <input
+  196 |                     type="tel"
+  197 |                     value={phone} {
+  digest: '861231005'
+}
+⚠ Fast Refresh had to perform a full reload when ./app/dang-nhap/ClientPage.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload

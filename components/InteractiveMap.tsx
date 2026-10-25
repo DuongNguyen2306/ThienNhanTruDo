@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { MapPin, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { geocodeApi, type GeocodeResult } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import type { Map as LeafletMap } from 'leaflet'
 
 interface InteractiveMapProps {
   lat: number
@@ -21,7 +22,7 @@ interface MapModules {
   TileLayer: any
   Marker: any
   Popup: any
-  useMap: any
+  useMap: () => LeafletMap
   useMapEvents: any
 }
 
@@ -42,6 +43,7 @@ function MapInner({
   const [modules, setModules] = useState<MapModules | null>(null)
   const [dragging, setDragging] = useState(false)
   const [mapReady, setMapReady] = useState(false)
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null)
   const markerRef = useRef<any>(null)
   const searchControlRef = useRef<any>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -85,11 +87,11 @@ function MapInner({
 
   // Setup search control after map loads
   useEffect(() => {
-    if (!modules || !mapContainerRef.current) return
+    if (!modules || !mapInstance) return
 
     const L = modules.L
-    const map = mapContainerRef.current['_leaflet_map']
-    
+    const map = mapInstance
+
     if (!map) return
 
     // Remove existing search control
@@ -282,7 +284,7 @@ function MapInner({
         map.removeControl(searchControlRef.current)
       }
     }
-  }, [modules, onChange])
+  }, [modules, onChange, mapInstance])
 
   // Update marker position when coords change externally
   useEffect(() => {
@@ -350,6 +352,15 @@ function MapInner({
     return null
   }
 
+  // Component to capture the Leaflet map instance via official API
+  function MapInstanceCapture() {
+    const map = modules!.useMap()
+    useEffect(() => {
+      setMapInstance(map)
+    }, [map])
+    return null
+  }
+
   return (
     <div ref={mapContainerRef} className="h-full w-full">
       <MapContainer
@@ -364,6 +375,7 @@ function MapInner({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapClickHandler />
+        <MapInstanceCapture />
         
         <Marker
           position={[lat, lng]}

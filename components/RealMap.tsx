@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { formatVnd } from '@/lib/data'
+import type { LeafletMouseEvent } from 'leaflet'
 
 // Flexible listing type for map markers
 interface MapListing {
@@ -323,7 +324,7 @@ function RealMapInner({
             position={[listing.lat, listing.lng]}
             icon={makePriceIcon(listing, isSelected)}
             eventHandlers={{
-              click: (e) => {
+              click: (e: LeafletMouseEvent) => {
                 // Open popup and trigger select
                 e.target.openPopup()
                 onSelect?.(listing.id)
