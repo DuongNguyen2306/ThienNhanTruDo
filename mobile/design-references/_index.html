@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Mobile design references</title>
+<style>
+body{font-family:Segoe UI,sans-serif;background:#222;color:#eee;margin:0;padding:12px}
+.grid{display:flex;flex-wrap:wrap;gap:10px}
+figure{margin:0;background:#000;padding:4px;border:1px solid #555}
+img{display:block;max-height:420px;max-width:200px;background:#fff}
+figcaption{font-weight:700;text-align:center;padding:3px;font-size:15px;color:#ffd}
+</style></head><body>
+<h1>mobile/design-references</h1>
+<div class="grid">
+</div>
+<script>
+const files = '1.jpg','2.jpg','3.jpg','4.jpg','5.jpg','6.jpg','7.jpg','8.jpg','9.jpg','10.jpg','11.jpg','12.jpg','13.jpg','14.jpg','15.jpg','16.jpg','17.jpg','18.jpg','19.jpg','20.jpg','21.jpg','22.jpg','23.jpg','24.jpg','25.jpg','26.jpg','27.jpg','28.jpg','29.jpg','30.jpg','31.jpg';
+const g = document.querySelector('.grid');
+for (const f of files) {
+  const fig = document.createElement('figure');
+  const img = document.createElement('img');
+  img.src = f;
+  img.loading = 'eager';
+  const cap = document.createElement('figcaption');
+  cap.textContent = f;
+  fig.appendChild(img); fig.appendChild(cap);
+  g.appendChild(fig);
+}
+</script>
+</body></html>

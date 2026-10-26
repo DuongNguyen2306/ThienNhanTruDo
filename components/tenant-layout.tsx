@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation'
 import { Bell, CalendarCheck, ChevronRight, FileText, Heart, Lock, ShieldCheck, Star, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth-provider'
+import { API_BASE } from '@/lib/api-config'
 
 type SidebarItemDef = {
   href: string
@@ -46,9 +47,8 @@ function TenantSidebar() {
       setLichHenCount(undefined)
       return
     }
-    
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://thiennhantrudo-be.onrender.com'
-    fetch(`${API_URL}/api/tenant/appointments?status=pending`, {
+
+    fetch(`${API_BASE}/api/tenant/appointments?status=pending`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : null)

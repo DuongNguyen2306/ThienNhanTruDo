@@ -10,8 +10,8 @@
   },
   "servers": [
     {
-"url": "https://thiennhantrudo-be.onrender.com",
-        "description": "Production Server"
+"url": "http://localhost:3005",
+        "description": "Development Server"
     }
   ],
   "components": {

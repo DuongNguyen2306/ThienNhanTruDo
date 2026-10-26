@@ -1,6 +1,11 @@
 // API Client for Thiên Nhãn Backend
+//
+// The base URL lives in `lib/api-config.ts` — the single source of truth for
+// every API consumer in the app.
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'https://thiennhantrudo-be.onrender.com'
+import { API_BASE, IS_API_BASE_MISSING } from '@/lib/api-config'
+
+export { API_BASE }
 
 // Helper to get full URL for backend-served files (uploads, etc.)
 export function getBackendUrl(path: string): string {
@@ -74,6 +79,15 @@ async function request<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
+  // A deployment without NEXT_PUBLIC_API_URL must fail loudly instead of
+  // silently calling the wrong origin.
+  if (IS_API_BASE_MISSING) {
+    throw new ApiError(
+      'Chưa cấu hình NEXT_PUBLIC_API_URL cho môi trường này. Vui lòng kiểm tra biến môi trường.',
+      500
+    )
+  }
+
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
 
   // FormData bodies must be sent as-is: the browser has to add the multipart

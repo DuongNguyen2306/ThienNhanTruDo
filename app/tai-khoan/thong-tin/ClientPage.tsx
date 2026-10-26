@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/components/auth-provider'
+import { API_BASE } from '@/lib/api-config'
 
 interface ProfileData {
   fullName: string
@@ -41,9 +42,8 @@ export default function ThongTinPage() {
     if (!user) return
     const loadProfile = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://thiennhantrudo-be.onrender.com'
         const token = localStorage.getItem('api_token') || ''
-        const res = await fetch(`${API_URL}/api/auth/me`, {
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (res.ok) {
@@ -77,9 +77,8 @@ export default function ThongTinPage() {
     setSaving(true)
     setSuccess(false)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'
       const token = localStorage.getItem('api_token') || ''
-      const res = await fetch(`${API_URL}/api/auth/profile`, {
+      const res = await fetch(`${API_BASE}/api/auth/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(formData),

@@ -3,10 +3,86 @@
 ║                                                   ║
 ║   🚀 Thiên Nhãn Backend Server                   ║
 ║                                                   ║
-║   Server: http://localhost:3105                   ║
+║   Server: http://localhost:3005                   ║
 ║   Environment: development                    ║
 ║   Database: MongoDB Atlas (thiennhan_db)       ║
-║   Email: smtp (configured)      ║
+║   Email: resend (NOT configured)      ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
   
+2026-10-26T10:34:47.296Z GET /
+2026-10-26T10:34:47.310Z GET /json/version
+2026-10-26T10:34:54.654Z GET /health
+2026-10-26T10:35:46.172Z POST /api/auth/register
+2026-10-26T10:39:40.007Z GET /health
+2026-10-26T11:49:39.513Z GET /api/listings
+2026-10-26T11:49:56.455Z GET /api/listings
+2026-10-26T11:52:07.739Z GET /api/auth/me
+2026-10-26T11:52:09.476Z GET /api/listings/featured
+2026-10-26T11:52:09.481Z GET /api/tenant/profile
+2026-10-26T11:52:35.270Z GET /api/listings/109129c6-fb2c-43f9-a2a0-cfb12eae9c14
+2026-10-26T11:52:49.269Z GET /api/listings
+2026-10-26T11:53:05.969Z GET /api/listings/46c07a23-fff9-4584-9e18-015e70a42434
+2026-10-26T11:54:14.636Z GET /api/listings/ded158b8-d160-4470-9824-f865cb970e62
+2026-10-26T11:56:41.177Z GET /api/listings/featured
+2026-10-26T11:56:41.179Z GET /api/listings/ded158b8-d160-4470-9824-f865cb970e62
+2026-10-26T11:56:41.180Z GET /api/tenant/profile
+2026-10-26T11:56:41.182Z GET /api/listings
+2026-10-26T12:52:21.890Z GET /api/auth/me
+2026-10-26T12:52:23.588Z GET /api/listings/featured
+2026-10-26T12:52:23.596Z GET /api/tenant/profile
+2026-10-26T12:52:25.191Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T12:52:25.807Z GET /api/tenant/profile
+2026-10-26T12:52:27.835Z GET /api/tenant/saved
+2026-10-26T12:52:29.243Z GET /api/listings
+2026-10-26T12:52:52.357Z GET /api/listings
+2026-10-26T13:11:12.592Z GET /api/auth/me
+2026-10-26T13:11:14.315Z GET /api/listings/featured
+2026-10-26T13:11:14.329Z GET /api/tenant/profile
+2026-10-26T13:11:19.522Z GET /api/listings/2b40a600-dfa6-4b60-b5f0-51fcb0489279
+2026-10-26T13:11:23.556Z POST /api/tenant/saved/2b40a600-dfa6-4b60-b5f0-51fcb0489279
+2026-10-26T13:11:29.887Z GET /api/tenant/saved
+2026-10-26T13:11:31.350Z GET /api/listings/listing-003
+2026-10-26T13:11:33.988Z GET /api/listings/featured
+2026-10-26T13:11:33.994Z GET /api/tenant/profile
+2026-10-26T13:11:36.586Z GET /api/listings
+2026-10-26T13:11:37.269Z GET /api/listings
+2026-10-26T13:13:35.487Z GET /api/listings
+2026-10-26T13:13:40.396Z GET /api/listings/46c07a23-fff9-4584-9e18-015e70a42434
+2026-10-26T13:13:43.539Z GET /api/listings/46c07a23-fff9-4584-9e18-015e70a42434
+2026-10-26T13:13:50.587Z POST /api/tenant/appointments
+2026-10-26T13:13:51.707Z GET /api/listings/46c07a23-fff9-4584-9e18-015e70a42434
+2026-10-26T13:13:54.089Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:13:57.139Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:13:57.582Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:13:57.992Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:13:58.461Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:13:59.736Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:14:00.408Z GET /api/tenant/appointments
+[tenant/appointments] userId: 9ff0f89a-ca1c-4eb7-8c57-e6331e39f38c
+2026-10-26T13:14:01.479Z GET /api/tenant/profile
+2026-10-26T13:14:02.833Z GET /api/listings
+2026-10-26T13:14:04.553Z GET /api/tenant/saved
+2026-10-26T13:14:05.599Z GET /api/listings/featured
+2026-10-26T13:14:05.605Z GET /api/tenant/profile
+2026-10-26T13:15:12.493Z GET /api/auth/seller-application
+2026-10-26T14:12:21.321Z GET /api-docs/
+2026-10-26T14:12:21.449Z GET /api-docs/swagger-ui.css
+2026-10-26T14:12:21.452Z GET /api-docs/swagger-ui-bundle.js
+2026-10-26T14:12:21.454Z GET /api-docs/swagger-ui-standalone-preset.js
+2026-10-26T14:12:21.467Z GET /api-docs/swagger-ui-init.js
+2026-10-26T14:13:03.652Z GET /api-docs/
+2026-10-26T14:13:03.670Z GET /api-docs/swagger-ui.css
+2026-10-26T14:13:03.674Z GET /api-docs/swagger-ui-bundle.js
+2026-10-26T14:13:03.675Z GET /api-docs/swagger-ui-standalone-preset.js
+2026-10-26T14:13:03.677Z GET /api-docs/swagger-ui-init.js
+2026-10-26T15:02:58.353Z GET /health
+2026-10-26T15:03:05.248Z GET /api/listings
+2026-10-26T15:04:10.192Z GET /health

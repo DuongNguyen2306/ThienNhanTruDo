@@ -37,14 +37,19 @@ const allowedOrigins = [
 
 // Thêm production frontend URLs từ env (comma separated)
 if (process.env.FRONTEND_URL) {
-  const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim());
+    const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim());
   allowedOrigins.push(...extraUrls);
 }
+
+// `FRONTEND_URL=*` means "allow any origin" — it has to be handled as a
+// wildcard, because the origin check below is an exact match and the
+// literal string '*' would never equal a real Origin header.
+const allowAnyOrigin = allowedOrigins.includes('*');
 
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`CORS: Origin ${origin} not allowed`));

@@ -11,8 +11,32 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize('seller'));
 
-// API base URL for file URLs (frontend-served files need full URL)
-const API_BASE = process.env.API_BASE_URL || 'https://thiennhantrudo-be.onrender.com';
+// Base URL used to build absolute URLs for uploaded files.
+//
+// Resolution order:
+//   1. `API_BASE_URL` from the environment — set this in every deployment.
+//   2. The request's own origin — correct for local development and for any
+//      deployment behind a proxy that sets the standard forwarding headers.
+//   3. `http://localhost:<port>` — the local default.
+//
+// There is deliberately no hardcoded legacy host here: a stale fallback
+// would make the app serve images from a server that is no longer the
+// source of truth.
+function resolveApiBase(req) {
+  if (process.env.API_BASE_URL) {
+    return process.env.API_BASE_URL.replace(/\/+$/, '');
+  }
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const forwardedHost = req.headers['x-forwarded-host'];
+
+  if (forwardedHost) {
+    const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) || 'https';
+    return `${proto}://${forwardedHost}`;
+  }
+
+  return `http://localhost:${config.port}`;
+}
 
 // ============================================
 // GET /api/seller/listings - My listings
@@ -673,8 +697,9 @@ router.post('/upload', (req, res, next) => {
     }
     
     // Return uploaded file URLs with full path
+    const apiBase = resolveApiBase(req);
     const uploadedFiles = req.files.map(f => ({
-      url: `${API_BASE}/uploads/${req.user.id}/${f.filename}`,
+      url: `${apiBase}/uploads/${req.user.id}/${f.filename}`,
       filename: f.filename,
       originalName: f.originalname,
       size: f.size,

@@ -21,12 +21,8 @@ const options = {
     },
     servers: [
       {
-        url: 'https://thiennhantrudo-be.onrender.com',
-        description: '🚀 Production Server (Render)',
-      },
-      {
-        url: 'http://localhost:3001',
-        description: '💻 Development Server',
+        url: process.env.API_BASE_URL || 'http://localhost:3005',
+        description: 'Development Server',
       },
     ],
     components: {

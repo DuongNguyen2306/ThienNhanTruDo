@@ -111,3 +111,14 @@
  GET / 200 in 19ms (next.js: 5ms, application-code: 13ms)
  GET /dang-nhap 200 in 20ms (next.js: 5ms, application-code: 15ms)
  GET /quen-mat-khau 200 in 28ms (next.js: 10ms, application-code: 18ms)
+ GET /dang-nhap 200 in 199ms (next.js: 20ms, application-code: 179ms)
+ GET /quen-mat-khau 200 in 241ms (next.js: 172ms, application-code: 69ms)
+✓ Compiled in 1561ms
+✓ Compiled in 3s
+✓ Compiled in 1952ms
+ GET / 200 in 1358ms (next.js: 439ms, application-code: 919ms)
+ GET / 200 in 160ms (next.js: 35ms, application-code: 125ms)
+ GET /dang-nhap 200 in 181ms (next.js: 130ms, application-code: 51ms)
+ GET / 200 in 84ms (next.js: 44ms, application-code: 40ms)
+ GET / 200 in 40ms (next.js: 10ms, application-code: 30ms)
+[?25h
