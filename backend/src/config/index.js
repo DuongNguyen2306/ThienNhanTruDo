@@ -60,6 +60,21 @@ module.exports = {
   },
   apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:3005',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  /**
+   * Demo mode for the platform rating ("ĐÁNH GIÁ WEBSITE").
+   *
+   * When enabled, the public endpoints serve an illustrative, clearly labelled
+   * sample of reviews so the section can be demonstrated without any real
+   * customer feedback. The demo reviews are never written to the database and
+   * are never counted into the real statistics.
+   *
+   * OFF by default, and FORCED OFF in production — a production site must
+   * never show sample data as if it were genuine customer feedback.
+   */
+  demoWebsiteReviews:
+    nodeEnv === 'production'
+      ? false
+      : /^(1|true|yes|on)$/i.test(String(process.env.DEMO_WEBSITE_REVIEWS || '').trim()),
   vnpay: {
     hashSecret: vnpayHashSecret,
   },

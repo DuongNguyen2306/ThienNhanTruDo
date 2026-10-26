@@ -15,12 +15,12 @@
  * client sends.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  AlertTriangle, CheckCircle2, Loader2, Lock, MessageSquare, Send, Star,
+  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Lock, MessageSquare, Send, Star,
 } from 'lucide-react'
-import { websiteReviewApi, type QualifyingTransaction, type WebsiteReview } from '@/lib/api'
+import { websiteReviewApi, type QualifyingTransaction, type WebsiteReview, type WebsiteReviewSummary } from '@/lib/api'
 import { formatVnd } from '@/lib/data'
 import { useAuth } from '@/components/auth-provider'
 
@@ -45,10 +45,15 @@ export function WebsiteReviewSection() {
   const router = useRouter()
 
   // Public aggregate + list
-  const [summary, setSummary] = useState<{ average: number; totalReviews: number } | null>(null)
+  const [summary, setSummary] = useState<WebsiteReviewSummary | null>(null)
   const [reviews, setReviews] = useState<WebsiteReview[]>([])
+  const [demoReviews, setDemoReviews] = useState<WebsiteReview[]>([])
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
+
+  // Pagination (client-side — the whole list is small enough to hold in memory)
+  const [page, setPage] = useState(1)
+  const listTopRef = useRef<HTMLDivElement | null>(null)
 
   // Eligibility (server-decided)
   const [eligible, setEligible] = useState<boolean | null>(null)
@@ -73,10 +78,11 @@ export function WebsiteReviewSection() {
     try {
       const [sum, list] = await Promise.all([
         websiteReviewApi.getSummary(),
-        websiteReviewApi.getList({ limit: 6 }),
+        websiteReviewApi.getList({ limit: 50 }),
       ])
-      setSummary({ average: sum.average, totalReviews: sum.totalReviews })
+      setSummary(sum)
       setReviews(list.reviews ?? [])
+      setDemoReviews(list.demoReviews ?? [])
     } catch (err: any) {
       setListError(err?.message || 'Không thể tải đánh giá')
     } finally {
@@ -116,7 +122,6 @@ export function WebsiteReviewSection() {
   const submit = async () => {
     setFormError(null)
     setSuccess(null)
-
     if (!transactionId) {
       setFormError('Vui lòng chọn giao dịch đủ điều kiện.')
       return
@@ -146,6 +151,59 @@ export function WebsiteReviewSection() {
     }
   }
 
+  // The demo mode is driven by the backend. When it is on, the public section
+  // shows the illustrative sample data (clearly labelled); the real
+  // statistics are never mixed with it.
+  const demoMode = Boolean(summary?.demo?.enabled) && demoReviews.length > 0
+  const displayAverage = demoMode ? summary!.demo!.average! : (summary?.average ?? 0)
+  const displayTotal = demoMode ? summary!.demo!.totalReviews! : (summary?.totalReviews ?? 0)
+
+  // ── Pagination ───────────────────────────────────────────────────────────
+  // The list is paginated on the client: the whole list is small, so no extra
+  // round-trip is needed and switching pages never reloads the site.
+  const PAGE_SIZE = 6
+
+  // Demo mode shows the sample reviews; otherwise the real ones.
+  const sourceReviews = useMemo(
+    () => (demoMode ? demoReviews : reviews),
+    [demoMode, demoReviews, reviews]
+  )
+
+  // Newest first — a review's `createdAt` decides the order.
+  const sortedReviews = useMemo(
+    () =>
+      [...sourceReviews].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ),
+    [sourceReviews]
+  )
+
+  const totalItems = sortedReviews.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+
+  // Keep the current page inside the valid range (e.g. after a review is added
+  // or removed and the last page disappears).
+  useEffect(() => {
+    setPage((prev) => (prev > totalPages ? totalPages : prev < 1 ? 1 : prev))
+  }, [totalPages])
+
+  const currentPage = Math.min(Math.max(1, page), totalPages)
+  const startIndex = (currentPage - 1) * PAGE_SIZE
+  const pageItems = sortedReviews.slice(startIndex, startIndex + PAGE_SIZE)
+  const rangeStart = totalItems === 0 ? 0 : startIndex + 1
+  const rangeEnd = Math.min(startIndex + PAGE_SIZE, totalItems)
+
+  // Scroll only to the top of the review list — never to the top of the page.
+  const goToPage = useCallback((next: number) => {
+    setPage(next)
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const top = listTopRef.current?.getBoundingClientRect().top ?? 0
+        window.scrollTo({ top: window.scrollY + top - 16, behavior: 'smooth' })
+      })
+    }
+  }, [])
+
   return (
     <section className="border-t-[2px] border-[#151515] bg-white py-12" id="danh-gia-website">
       <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
@@ -165,12 +223,12 @@ export function WebsiteReviewSection() {
           {/* Average rating + count */}
           <div className="flex items-center gap-4 rounded-2xl border-[2px] border-[#151515] bg-[#FDE047] px-5 py-3 shadow-[3px_3px_0_#151515]">
             <span className="font-mono text-3xl font-black tabular-nums">
-              {(summary?.average ?? 0).toFixed(1)}
+              {(displayAverage).toFixed(1)}
             </span>
             <div>
-              <Stars value={summary?.average ?? 0} />
+              <Stars value={displayAverage} />
               <p className="mt-0.5 text-xs font-semibold text-[#151515]/60">
-                {summary?.totalReviews ?? 0} đánh giá
+                {displayTotal} đánh giá
               </p>
             </div>
           </div>
@@ -355,70 +413,127 @@ export function WebsiteReviewSection() {
         </div>
 
         {/* List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-10 text-[#151515]/50">
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Đang tải đánh giá...
-          </div>
-        ) : listError ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-red-600">
-            <AlertTriangle className="size-4" />
-            {listError}
-          </div>
-        ) : reviews.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-            <MessageSquare className="size-9 text-[#151515]/20" />
-            <p className="text-sm font-medium text-[#151515]/55">
-              Chưa có đánh giá nào cho website.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {reviews.map((r) => (
-              <article
-                key={r.id}
-                className="flex flex-col gap-3 rounded-2xl border-[2px] border-[#151515] bg-white p-5 shadow-[3px_3px_0_#151515]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex size-9 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-[#F5F5F0] text-xs font-black text-[#151515]/70">
-                      {r.reviewerInitials || r.reviewerName?.slice(0, 2)?.toUpperCase() || '??'}
-                    </span>
-                    <div>
-                      <p className="text-sm font-bold text-[#151515]">
-                        {r.reviewerName || 'Người dùng'}
-                      </p>
-                      <p className="text-[11px] text-[#151515]/50">
-                        {r.createdAt
-                          ? new Date(r.createdAt).toLocaleDateString('vi-VN', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                            })
-                          : ''}
-                      </p>
+        <div ref={listTopRef}>
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-[#151515]/50">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Đang tải đánh giá...
+            </div>
+          ) : listError ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-red-600">
+              <AlertTriangle className="size-4" />
+              {listError}
+            </div>
+          ) : totalItems === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <MessageSquare className="size-9 text-[#151515]/20" />
+              <p className="text-sm font-medium text-[#151515]/55">
+                Chưa có đánh giá nào cho website.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {pageItems.map((r) => (
+                  <article
+                    key={r.id}
+                    className="flex flex-col gap-3 rounded-2xl border-[2px] border-[#151515] bg-white p-5 shadow-[3px_3px_0_#151515]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex size-9 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-[#F5F5F0] text-xs font-black text-[#151515]/70">
+                          {r.reviewerInitials || r.reviewerName?.slice(0, 2)?.toUpperCase() || '??'}
+                        </span>
+                        <div>
+                          <p className="text-sm font-bold text-[#151515]">
+                            {r.reviewerName || 'Người dùng'}
+                          </p>
+                          <p className="text-[11px] text-[#151515]/50">
+                            {r.createdAt
+                              ? new Date(r.createdAt).toLocaleDateString('vi-VN', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                })
+                              : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <Stars value={r.score} />
                     </div>
-                  </div>
-                  <Stars value={r.score} />
-                </div>
 
-                {r.title ? (
-                  <p className="text-sm font-bold text-[#151515]">{r.title}</p>
-                ) : null}
-                <p className="text-sm leading-relaxed text-[#151515]/70">{r.content}</p>
+                    {r.title ? (
+                      <p className="text-sm font-bold text-[#151515]">{r.title}</p>
+                    ) : null}
+                    <p className="text-sm leading-relaxed text-[#151515]/70">{r.content}</p>
 
-                {r.adminReply ? (
-                  <div className="mt-auto rounded-xl border-[2px] border-[#FDE047] bg-[#FDE047]/20 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#151515]/50">
-                      Phản hồi từ Thiên Nhãn
-                    </p>
-                    <p className="mt-1 text-sm text-[#151515]/80">{r.adminReply}</p>
-                  </div>
+                    {r.adminReply ? (
+                      <div className="mt-auto rounded-xl border-[2px] border-[#FDE047] bg-[#FDE047]/20 p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#151515]/50">
+                          Phản hồi từ Thiên Nhãn
+                        </p>
+                        <p className="mt-1 text-sm text-[#151515]/80">{r.adminReply}</p>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              <div className="mt-8 flex flex-col items-center gap-3">
+                <p className="text-xs font-semibold text-[#151515]/60">
+                  Hiển thị {rangeStart}–{rangeEnd} trong tổng số {totalItems} đánh giá
+                </p>
+
+                {totalPages > 1 ? (
+                  <nav
+                    className="flex flex-wrap items-center justify-center gap-2"
+                    aria-label="Phân trang đánh giá website"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="flex h-10 items-center gap-1 rounded-lg border-[2px] border-[#151515] bg-white px-3 text-sm font-bold text-[#151515] shadow-[2px_2px_0_#151515] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-none disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                    >
+                      <ChevronLeft className="size-4" />
+                      Trước
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => {
+                      const isCurrent = n === currentPage
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => goToPage(n)}
+                          aria-current={isCurrent ? 'page' : undefined}
+                          className={`h-10 min-w-10 rounded-lg border-[2px] border-[#151515] px-3 text-sm font-black shadow-[2px_2px_0_#151515] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-none ${
+                            isCurrent
+                              ? 'bg-[#FDE047] text-[#151515]'
+                              : 'bg-white text-[#151515]'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      )
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="flex h-10 items-center gap-1 rounded-lg border-[2px] border-[#151515] bg-white px-3 text-sm font-bold text-[#151515] shadow-[2px_2px_0_#151515] transition hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-none disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                    >
+                      Tiếp
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </nav>
                 ) : null}
-              </article>
-            ))}
-          </div>
-        )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </section>
   )

@@ -817,7 +817,7 @@ export const websiteReviewApi = {
     if (params?.page) searchParams.append('page', String(params.page))
     if (params?.limit) searchParams.append('limit', String(params.limit))
     const query = searchParams.toString()
-    return api<{ reviews: WebsiteReview[]; pagination: Pagination }>(
+    return api<{ reviews: WebsiteReview[]; pagination: Pagination; demoReviews: WebsiteReview[] }>(
       `/api/website-reviews${query ? `?${query}` : ''}`
     )
   },
@@ -1739,6 +1739,16 @@ export type WebsiteReviewSummary = {
   average: number
   totalReviews: number
   distribution: Record<string, number>
+  /**
+   * Illustrative sample data, present only when the backend demo mode is on.
+   * The REAL statistics above never include these reviews.
+   */
+  demo?: {
+    enabled: boolean
+    average?: number
+    totalReviews?: number
+    distribution?: Record<string, number>
+  }
 }
 
 // A published website review shown to the public.
@@ -1752,6 +1762,8 @@ export type WebsiteReview = {
   reviewerInitials?: string | null
   adminReply?: string | null
   adminReplyAt?: string | null
+  /** True for the illustrative sample reviews served in demo mode. */
+  isDemo?: boolean
 }
 
 // A transaction that qualifies the user to review the website.

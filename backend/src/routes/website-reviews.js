@@ -6,6 +6,8 @@ const { authenticate, optionalAuth, ROLES } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { createRateLimiter } = require('../middleware/rateLimiter');
 const reviewHelper = require('../helpers/websiteReviewHelper');
+const reviewDemo = require('../helpers/websiteReviewDemo');
+const config = require('../config');
 const { createAuditLog } = require('../helpers/auditHelper');
 
 const router = express.Router();
@@ -21,15 +23,32 @@ const submitRateLimiter = createRateLimiter({
 // ============================================
 // GET /api/website-reviews/summary
 // Public aggregate: average rating + total review count.
-// No personal data is exposed here.
+//
+// The REAL statistics (`average`, `totalReviews`, `distribution`) always
+// describe REAL reviews only — demo data never leaks into them.
+//
+// When the demo mode is enabled an extra `demo` object is added, carrying the
+// illustrative aggregate and the sample reviews. The frontend uses it to
+// render a clearly labelled "dữ liệu minh họa" block.
 // ============================================
 router.get('/summary', async (req, res, next) => {
   try {
     const aggregate = await reviewHelper.getAggregate();
+    const demoEnabled = config.demoWebsiteReviews;
+    const demo = demoEnabled ? reviewDemo.getDemoAggregate() : null;
+
     res.json({
       average: aggregate.average,
       totalReviews: aggregate.totalReviews,
       distribution: aggregate.distribution,
+      demo: demo
+        ? {
+            enabled: true,
+            average: demo.average,
+            totalReviews: demo.totalReviews,
+            distribution: demo.distribution,
+          }
+        : { enabled: false },
     });
   } catch (error) {
     next(error);
@@ -39,6 +58,11 @@ router.get('/summary', async (req, res, next) => {
 // ============================================
 // GET /api/website-reviews
 // Public list of published reviews (recent first).
+//
+// When the demo mode is enabled an extra `demoReviews` array is returned. It
+// holds the illustrative sample reviews, each flagged with `isDemo: true`, and
+// is NEVER mixed into `reviews` (which stays real-only) nor into the real
+// aggregate.
 // ============================================
 router.get('/', async (req, res, next) => {
   try {
@@ -64,9 +88,12 @@ router.get('/', async (req, res, next) => {
       reviewerInitials: r.reviewerInitials,
       adminReply: r.adminReply,
       adminReplyAt: r.adminReplyAt,
+      isDemo: false,
     }));
 
-    res.json({ reviews, pagination });
+    const demoReviews = config.demoWebsiteReviews ? reviewDemo.getDemoReviews() : [];
+
+    res.json({ reviews, pagination, demoReviews });
   } catch (error) {
     next(error);
   }
