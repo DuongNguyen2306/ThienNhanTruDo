@@ -202,7 +202,7 @@ export default function SearchPage() {
         <div className="mx-auto max-w-[1440px] px-5 lg:px-10">
           <h1
             className="text-2xl font-black text-[#151515] lg:text-3xl"
-            style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+            
           >
             TÌM PHÒNG PHÙ HỢP VỚI BẠN
           </h1>

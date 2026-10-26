@@ -41,10 +41,10 @@ export function ManagerPortalShell({ children }: { children: React.ReactNode }) 
           <div className="flex w-full items-center justify-between">
             {/* Logo */}
             <Link href="/manager" className="flex items-center gap-1.5">
-              <span className="text-[1.35rem] font-black leading-none text-[#151515]" style={{ fontFamily: "'Allura', cursive" }}>
+              <span className="text-[1.35rem] font-black leading-none text-[#151515]" style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif' }}>
                 Thiên Nhãn
               </span>
-              <span className="text-[1.35rem] font-black leading-none text-[#151515]/50" style={{ fontFamily: "'Allura', cursive", fontStyle: 'italic' }}>
+              <span className="text-[1.35rem] font-black leading-none text-[#151515]/50" style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif', fontStyle: 'italic' }}>
                 Trú Đồ
               </span>
               <span className="ml-2 hidden items-center rounded-full bg-[#151515] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white sm:flex">

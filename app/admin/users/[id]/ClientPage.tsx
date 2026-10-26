@@ -233,7 +233,7 @@ export default function AdminUserDetailPage({ params }: PageProps) {
               <div className="flex items-center gap-3">
                 <h1
                   className="text-2xl font-black text-[#151515] lg:text-3xl"
-                  style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                  
                 >
                   {user.fullName}
                 </h1>

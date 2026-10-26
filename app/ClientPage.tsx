@@ -50,7 +50,7 @@ export default function ClientPage() {
             <div className="order-2 lg:order-1">
               <h1 
                 className="text-[2.8rem] font-black leading-[1.1] tracking-tight text-[#151515] xl:text-[3.5rem]"
-                style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                
               >
                 TÌM PHÒNG THẬT —{' '}
                 <span className="relative inline-block">
@@ -68,7 +68,7 @@ export default function ClientPage() {
               <div className="mt-10">
                 <p 
                   className="mb-4 text-sm font-bold text-[#151515]"
-                  style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                  
                 >
                   Bạn muốn tìm phòng ở đâu?
                 </p>
@@ -145,7 +145,7 @@ export default function ClientPage() {
             <div>
               <h2 
                 className="text-2xl font-black text-[#151515] lg:text-3xl"
-                style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                
               >
                 PHÒNG NỔI BẬT
               </h2>
@@ -204,7 +204,7 @@ export default function ClientPage() {
           <div className="flex flex-col items-center justify-center rounded-2xl border-[2px] border-[#151515] bg-[#151515] p-10 text-center shadow-[6px_6px_0_#FDE047]">
             <h2 
               className="text-2xl font-black text-white lg:text-3xl"
-              style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+              
             >
               Bạn có phòng muốn đăng?
             </h2>

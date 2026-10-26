@@ -3,13 +3,13 @@ import Link from 'next/link'
 function LogoText() {
   return (
     <div className="flex items-baseline gap-1">
-      <span className="text-xl font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
+      <span className="text-xl font-black tracking-tight text-[#151515]" style={{ fontWeight: 900 }}>
         THIÊN
       </span>
-      <span className="text-xl font-black italic tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
+      <span className="text-xl font-black italic tracking-tight text-[#151515]" style={{ fontWeight: 900 }}>
               NHÃN
       </span>
-      <span className="text-xl font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
+      <span className="text-xl font-black tracking-tight text-[#151515]" style={{ fontWeight: 900 }}>
         TRÚ ĐỒ
       </span>
     </div>

@@ -36,10 +36,10 @@ function getProfileLabel(role: Role | undefined): string {
 export function Brand({ href = '/', badge, light = false }: { href?: string; badge?: string; light?: boolean }) {
   return (
     <Link href={href} className="flex items-center gap-1.5 font-bold tracking-tight whitespace-nowrap">
-      <span className={`text-[1.35rem] leading-none ${light ? 'text-[#151515]' : 'text-white'}`} style={{ fontFamily: "'Allura', cursive" }}>
+      <span className={`text-[1.35rem] leading-none ${light ? 'text-[#151515]' : 'text-white'}`} style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif' }}>
         Thiên Nhãn
       </span>
-      <span className={`text-[1.35rem] leading-none ${light ? 'text-[#151515]/50' : 'text-white/70'}`} style={{ fontFamily: "'Allura', cursive", fontStyle: 'italic' }}>
+      <span className={`text-[1.35rem] leading-none ${light ? 'text-[#151515]/50' : 'text-white/70'}`} style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif', fontStyle: 'italic' }}>
         Trú Đồ
       </span>
       {badge ? (
@@ -515,8 +515,8 @@ export function SellerPortalShell({
           <div className="flex w-full items-center justify-between">
             {/* Logo */}
             <a href="/" className="flex items-center gap-1.5">
-              <span className="text-[1.35rem] font-black leading-none text-[#151515]" style={{ fontFamily: "'Allura', cursive" }}>Thiên Nhãn</span>
-              <span className="text-[1.35rem] font-black leading-none text-[#151515]/50" style={{ fontFamily: "'Allura', cursive", fontStyle: 'italic' }}>Trú Đồ</span>
+              <span className="text-[1.35rem] font-black leading-none text-[#151515]" style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif' }}>Thiên Nhãn</span>
+              <span className="text-[1.35rem] font-black leading-none text-[#151515]/50" style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif', fontStyle: 'italic' }}>Trú Đồ</span>
               <span className="ml-2 hidden items-center rounded-full bg-[#151515] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white sm:flex">
                 SELLER
               </span>
@@ -617,7 +617,7 @@ export function PublicFooter() {
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto grid max-w-7xl gap-8 px-5 py-10 text-sm text-slate-500 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-10">
         <div>
-          <p className="text-base font-bold text-slate-800" style={{ fontFamily: "'Allura', cursive", fontSize: '1.4rem' }}>
+          <p className="text-base font-bold text-slate-800" style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif', fontSize: '1.4rem' }}>
             Thiên Nhãn <em>trú đồ</em>
           </p>
           <p className="mt-2 leading-6">Nền tảng phòng trọ minh bạch tại Việt Nam. Mọi tin đăng đã được Manager kiểm định.</p>

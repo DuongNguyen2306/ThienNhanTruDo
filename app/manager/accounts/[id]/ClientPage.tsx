@@ -186,7 +186,7 @@ export default function AccountDetailPage() {
               {account.initials}
             </div>
             <div>
-              <h1 className="text-2xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+              <h1 className="text-2xl font-black text-[#151515]" >
                 {account.fullName}
               </h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">

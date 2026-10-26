@@ -160,7 +160,7 @@ export default function AdminProposalsPage() {
       <div>
         <h1
           className="text-2xl font-black text-[#151515] lg:text-3xl"
-          style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+          
         >
           ĐỀ XUẤT XỬ LÝ TÀI KHOẢN
         </h1>

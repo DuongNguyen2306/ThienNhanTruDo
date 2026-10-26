@@ -332,7 +332,7 @@ function RealMapInner({
             }}
           >
             <Popup autoPan={true} closeButton={true} maxWidth={280} id={popupId}>
-              <div style={{ minWidth: 220, fontFamily: 'system-ui, sans-serif', padding: '4px 0' }}>
+              <div style={{ minWidth: 220, fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif', padding: '4px 0' }}>
                 <a href={`/phong/${listing.id}`} style={{ display: 'block', width: '100%', height: '120px', borderRadius: 8, overflow: 'hidden', marginBottom: 10, cursor: 'pointer' }}>
                   <img
                     src={listing.image ?? POPUP_IMGS[idx % POPUP_IMGS.length]}

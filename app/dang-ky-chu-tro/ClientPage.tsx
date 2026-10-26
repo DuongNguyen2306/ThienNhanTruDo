@@ -250,7 +250,7 @@ export default function ApplySellerPage() {
           </div>
           <h1 
             className="mt-4 text-3xl font-black text-[#151515] lg:text-4xl"
-            style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+            
           >
             ĐĂNG KÝ TRỞ THÀNH CHỦ TRỌ
           </h1>

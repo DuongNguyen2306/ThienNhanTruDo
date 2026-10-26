@@ -181,7 +181,7 @@ export default function ProposalDetailPage() {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                <h1 className="text-xl font-black text-[#151515]" >
                   ĐỀ XUẤT XỬ LÝ TÀI KHOẢN
                 </h1>
                 <StatusBadge status={proposal.status} />

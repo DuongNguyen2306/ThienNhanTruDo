@@ -55,7 +55,7 @@ export function PortalSidebar({ items, footer, variant = 'light' }: { items: Sid
                           ? 'border-[2px] border-transparent text-white/70 hover:border-white/20 hover:bg-white/5 hover:text-white'
                           : 'border-[2px] border-transparent text-[#151515]/60 hover:border-[#FDE047]/50 hover:bg-[#FDE047]/20 hover:text-[#151515]',
                     )}
-                    style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                    
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
                       {Icon ? <Icon className={cn('size-4 shrink-0', active ? 'text-[#151515]' : isDark ? 'text-white/50' : 'text-[#151515]/50')} /> : null}

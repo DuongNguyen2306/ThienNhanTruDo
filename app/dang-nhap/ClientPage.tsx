@@ -174,7 +174,7 @@ function LoginInner() {
             <div className="mb-6">
               <h1 
                 className="text-2xl font-black text-[#151515] lg:text-3xl" 
-                style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                
               >
                 ĐĂNG NHẬP
               </h1>
@@ -332,12 +332,12 @@ function LoginInner() {
             
             <h2 
               className="text-4xl font-black leading-tight text-[#151515] xl:text-5xl" 
-              style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+              
             >
               Tìm phòng thật — thuê đúng người.
             </h2>
 
-            <div className="mt-4 inline-flex items-center gap-2 rounded-xl border-[3px] border-[#151515] bg-white px-5 py-2.5 text-sm font-black text-[#151515] shadow-[3px_3px_0_#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-xl border-[3px] border-[#151515] bg-white px-5 py-2.5 text-sm font-black text-[#151515] shadow-[3px_3px_0_#151515]" >
               <ShieldCheck className="size-5" />
               THIÊN NHÃN TRÚ ĐỒ
             </div>

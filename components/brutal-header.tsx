@@ -71,7 +71,7 @@ export function BrutalHeader() {
         <Link
           href="/dang-nhap"
           className="rounded-lg border-[2px] border-[#151515] bg-white px-4 py-2 text-sm font-semibold text-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-          style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+          
         >
           Đăng nhập
         </Link>
@@ -88,7 +88,7 @@ export function BrutalHeader() {
           <span className="flex size-8 items-center justify-center rounded-full bg-[#FDE047] text-sm font-black text-[#151515]">
             {user.initials}
           </span>
-          <span className="hidden text-sm font-semibold text-[#151515] sm:block" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+          <span className="hidden text-sm font-semibold text-[#151515] sm:block" >
             {user.name}
           </span>
           <svg
@@ -264,13 +264,13 @@ export function BrutalHeader() {
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <LogoIcon />
           <div className="flex items-baseline gap-1">
-            <span className="text-lg font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
+            <span className="text-lg font-black tracking-tight text-[#151515]" style={{ fontWeight: 900 }}>
               THIÊN
             </span>
-            <span className="text-lg font-black italic tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
+            <span className="text-lg font-black italic tracking-tight text-[#151515]" style={{ fontWeight: 900 }}>
               NHÃN
             </span>
-            <span className="text-lg font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontWeight: 900 }}>
+            <span className="text-lg font-black tracking-tight text-[#151515]" style={{ fontWeight: 900 }}>
               TRÚ ĐỒ
             </span>
           </div>
@@ -299,7 +299,7 @@ export function BrutalHeader() {
                     ? 'bg-[#FDE047] text-[#151515] border-[2px] border-[#151515] shadow-[2px_2px_0_#151515]'
                     : 'text-[#151515]/70 hover:bg-[#151515]/5 hover:text-[#151515] border-2 border-transparent'
                 )}
-                style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+                
               >
                 {item.icon === 'map' && (
                   <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

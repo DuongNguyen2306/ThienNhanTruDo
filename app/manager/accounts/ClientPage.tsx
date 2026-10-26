@@ -169,7 +169,7 @@ export default function ManagerAccountsPage() {
       <div>
         <h1
           className="text-2xl font-black text-[#151515] lg:text-3xl"
-          style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+          
         >
           QUẢN LÝ TÀI KHOẢN
         </h1>

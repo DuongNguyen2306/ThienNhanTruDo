@@ -82,7 +82,7 @@ function StatCard({
         <Icon className="size-6" />
       </span>
       <div className="min-w-0">
-        <p className="text-2xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+        <p className="text-2xl font-black text-[#151515]" >
           {loading ? '...' : value}
         </p>
         <p className="mt-0.5 truncate text-sm font-semibold text-[#151515]/60">{label}</p>
@@ -213,7 +213,7 @@ export default function ClientPage() {
           <UserCircle className="size-8 text-[#151515]" />
         </div>
         <div>
-          <h1 className="text-2xl font-black text-[#151515] lg:text-3xl" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+          <h1 className="text-2xl font-black text-[#151515] lg:text-3xl" >
             Vui lòng đăng nhập
           </h1>
           <p className="mt-2 max-w-md text-sm text-[#151515]/60">
@@ -240,7 +240,7 @@ export default function ClientPage() {
     <>
       {/* Page heading */}
       <div className="mb-8">
-        <h1 className="text-2xl font-black text-[#151515] lg:text-3xl" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+        <h1 className="text-2xl font-black text-[#151515] lg:text-3xl" >
           Xin chào, <span className="font-bold">{user.name || user.fullName}</span>!
         </h1>
         <p className="mt-1 text-base text-[#151515]/60">
@@ -254,7 +254,7 @@ export default function ClientPage() {
         {/* Profile card */}
         <div className="overflow-hidden rounded-2xl border-[3px] border-[#151515] bg-white shadow-[4px_4px_0_#151515]">
           <div className="flex items-start justify-between border-b-[2px] border-[#151515] bg-[#FDE047] px-5 py-4">
-            <h2 className="text-base font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <h2 className="text-base font-black text-[#151515]" >
               Hồ sơ cá nhân
             </h2>
             <Link
@@ -324,7 +324,7 @@ export default function ClientPage() {
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-[#FDE047] shadow-[2px_2px_0_#151515]">
               <CalendarCheck2 className="size-4 text-[#151515]" />
             </span>
-            <h2 className="text-base font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <h2 className="text-base font-black text-[#151515]" >
               Lịch hẹn gần đây
             </h2>
           </div>
@@ -367,7 +367,7 @@ export default function ClientPage() {
             <span className="flex size-8 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-[#FECACA] shadow-[2px_2px_0_#151515]">
               <Heart className="size-4 text-[#EF4444]" />
             </span>
-            <h2 className="text-base font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <h2 className="text-base font-black text-[#151515]" >
               Phòng quan tâm
             </h2>
           </div>
@@ -418,7 +418,7 @@ export default function ClientPage() {
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-1 text-sm font-bold text-[#151515]">{room.title}</p>
                     <p className="mt-0.5 text-xs text-[#151515]/50">{room.district}</p>
-                    <p className="mt-2 font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                    <p className="mt-2 font-black text-[#151515]" >
                       {room.price.toLocaleString('vi-VN')} ₫
                     </p>
                     <p className="text-xs text-[#151515]/50">{room.area} m²</p>
@@ -442,7 +442,7 @@ export default function ClientPage() {
         <Link
           href="/tim-kiem"
           className="flex items-center justify-center gap-3 rounded-2xl border-[3px] border-[#151515] bg-[#FDE047] p-4 text-base font-black text-[#151515] shadow-[4px_4px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[5px_5px_0_#151515]"
-          style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+          
         >
           <svg className="size-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           Tìm phòng ngay
@@ -450,7 +450,7 @@ export default function ClientPage() {
         <Link
           href="/dang-ky"
           className="flex items-center justify-center gap-3 rounded-2xl border-[3px] border-[#151515] bg-white p-4 text-base font-black text-[#151515] shadow-[4px_4px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[5px_5px_0_#151515]"
-          style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}
+          
         >
           <Star className="size-6" />
           Giới thiệu bạn bè

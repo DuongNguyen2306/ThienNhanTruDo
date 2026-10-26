@@ -66,7 +66,7 @@ function SellerDashboard() {
       {/* ── B: Welcome header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-black text-[#151515] lg:text-3xl" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+          <h1 className="text-2xl font-black text-[#151515] lg:text-3xl" >
             Xin chào, {userName}! 👋
           </h1>
           <p className="mt-1 text-sm text-[#151515]/60">
@@ -118,7 +118,7 @@ function SellerDashboard() {
         {/* ── E: Listings table ── */}
         <Card className="overflow-hidden rounded-2xl border-[3px] border-[#151515] bg-white shadow-[4px_4px_0_#151515]">
           <CardHeader className="flex flex-row items-center justify-between border-b-[2px] border-[#151515] bg-[#F5F5F0] px-5 py-4">
-            <CardTitle className="flex items-center gap-2 text-base font-black" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <CardTitle className="flex items-center gap-2 text-base font-black" >
               <Megaphone className="size-5 text-[#FDE047]" />
               Tin đăng của bạn
             </CardTitle>
@@ -168,7 +168,7 @@ function SellerDashboard() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate font-semibold text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>{listing.title}</p>
+                              <p className="truncate font-semibold text-[#151515]" >{listing.title}</p>
                               <p className="flex items-center gap-1 truncate text-xs text-[#151515]/50">
                                 <MapPin className="size-3" />
                                 {listing.district}, {listing.city}
@@ -206,7 +206,7 @@ function SellerDashboard() {
           {/* ── F: Upcoming appointments ── */}
           <Card className="overflow-hidden rounded-2xl border-[3px] border-[#151515] bg-white shadow-[4px_4px_0_#151515]">
             <CardHeader className="flex flex-row items-center justify-between border-b-[2px] border-[#151515] bg-[#F5F5F0] px-5 py-4">
-              <CardTitle className="flex items-center gap-2 text-base font-black" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+              <CardTitle className="flex items-center gap-2 text-base font-black" >
                 <CalendarDays className="size-5 text-[#059669]" />
                 Lịch hẹn sắp tới
               </CardTitle>
@@ -238,7 +238,7 @@ function SellerDashboard() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                        <p className="truncate text-sm font-bold text-[#151515]" >
                           {appt.tenant?.fullName || appt.phone || 'Khách lẻ'}
                         </p>
                         <p className="truncate text-xs text-[#151515]/50">{appt.listing?.title}</p>
@@ -260,7 +260,7 @@ function SellerDashboard() {
           {/* ── G: Interested customers ── */}
           <Card className="overflow-hidden rounded-2xl border-[3px] border-[#151515] bg-white shadow-[4px_4px_0_#151515]">
             <CardHeader className="flex flex-row items-center justify-between border-b-[2px] border-[#151515] bg-[#FDE047] px-5 py-4">
-              <CardTitle className="flex items-center gap-2 text-base font-black" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+              <CardTitle className="flex items-center gap-2 text-base font-black" >
                 <Users className="size-5 text-[#151515]" />
                 Khách hàng quan tâm
               </CardTitle>
@@ -289,7 +289,7 @@ function SellerDashboard() {
                           {lead.name?.slice(0, 2).toUpperCase() || '??'}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>{lead.name}</p>
+                          <p className="truncate font-semibold text-[#151515]" >{lead.name}</p>
                           <p className="flex items-center gap-1 text-xs text-[#151515]/50">
                             <Phone className="size-3" /> {lead.phone}
                           </p>
@@ -331,7 +331,7 @@ function StatCard({
       <div className="flex items-start justify-between p-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-[#151515]/50">{label}</p>
-          <p className="mt-1 text-3xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>{value}</p>
+          <p className="mt-1 text-3xl font-black text-[#151515]" >{value}</p>
           <p className="mt-1 text-xs text-[#151515]/50">{sublabel}</p>
         </div>
         <div className="flex size-12 shrink-0 items-center justify-center rounded-xl border-[2px] border-[#151515] bg-white shadow-[2px_2px_0_#151515]">

@@ -1,9 +1,22 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { Be_Vietnam_Pro } from 'next/font/google'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Be Vietnam Pro là font chính của toàn bộ website.
+ * `subsets` gồm "vietnamese" nên đầy đủ dấu tiếng Việt (Ư Ữ Ơ Ồ Đ Ệ …)
+ * được phục vụ từ chính domain thay vì fallback sang font hệ thống.
+ */
+const beVietnamPro = Be_Vietnam_Pro({
+  subsets: ['latin', 'vietnamese'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  display: 'swap',
+  variable: '--font-be-vietnam-pro',
+})
 
 export const metadata: Metadata = {
   title: 'THIÊN NHÃN TRÚ ĐỒ — Phòng trọ đã kiểm định',
@@ -33,8 +46,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="vi">
-      <body className="antialiased">
+    <html lang="vi" className={beVietnamPro.variable}>
+      <body className={`${beVietnamPro.className} antialiased`}>
         <Providers>
           {children}
         </Providers>

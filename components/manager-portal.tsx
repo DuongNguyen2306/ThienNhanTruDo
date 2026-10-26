@@ -2119,7 +2119,7 @@ export function ManagerDashboard() {
         <p className="text-[11px] font-bold uppercase tracking-widest text-[#151515]/40">
           Trang quản trị <span className="mx-1.5 text-[#151515]/20">/</span> <span className="text-[#151515]/70">Tổng quan</span>
         </p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-[#151515]" >
           Tổng quan
         </h1>
         <p className="mt-2 text-sm text-[#151515]/50">
@@ -2457,7 +2457,7 @@ export function ApprovalsList() {
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#151515]/40">
             Trang quản trị <span className="mx-1.5 text-[#151515]/20">/</span> <span className="text-[#151515]/70">Duyệt tin đăng</span>
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-[#151515]" >
             Quản lý duyệt tin
           </h1>
           <p className="mt-2 text-sm text-[#151515]/50">
@@ -2929,7 +2929,7 @@ export function ApprovalDetail({ listingId }: ApprovalDetailProps) {
             </a>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+                <h1 className="text-2xl font-black text-[#151515]" >
                   Chi tiết tin đăng
                 </h1>
                 {getStatusBadge(listing.status)}
@@ -3408,7 +3408,7 @@ export function SellerRequestsList() {
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#151515]/40">
             Trang quản trị <span className="mx-1.5 text-[#151515]/20">/</span> <span className="text-[#151515]/70">Duyệt chủ trọ</span>
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-[#151515]" >
             Duyệt yêu cầu chủ trọ
           </h1>
           <p className="mt-2 text-sm text-[#151515]/50">

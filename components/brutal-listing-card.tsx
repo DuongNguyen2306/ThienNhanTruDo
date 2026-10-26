@@ -127,7 +127,7 @@ export function BrutalListingCard({ listing, variant = 'default' }: BrutalListin
 
         {/* Content */}
         <div className="p-4">
-          <h3 className="font-bold leading-snug text-[#151515] line-clamp-1" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+          <h3 className="font-bold leading-snug text-[#151515] line-clamp-1" >
             {listing.title}
           </h3>
           
@@ -138,7 +138,7 @@ export function BrutalListingCard({ listing, variant = 'default' }: BrutalListin
 
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+              <span className="text-xl font-black text-[#151515]" >
                 {formatVnd(listing.rent ?? 0)}
               </span>
               <span className="ml-1 text-xs font-medium text-[#151515]/50">/ tháng</span>

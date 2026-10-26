@@ -9,7 +9,7 @@ export default function GlobalError({
 }) {
   return (
     <html lang="vi">
-      <body style={{ fontFamily: "'Be Vietnam Pro', sans-serif", margin: 0, padding: 0, background: '#F8FAFC' }}>
+      <body style={{ margin: 0, padding: 0, background: '#F8FAFC' }}>
         <div style={{
           minHeight: '100vh',
           display: 'flex',
@@ -64,7 +64,6 @@ export default function GlobalError({
                 padding: '0.75rem 1.5rem',
                 fontSize: '0.875rem',
                 fontWeight: 700,
-                fontFamily: "'Be Vietnam Pro', sans-serif",
                 background: '#151515',
                 color: 'white',
                 border: '2px solid #151515',

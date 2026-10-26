@@ -141,10 +141,10 @@ export default function ThongTinPage() {
           </div>
         ) : (
           <div className="flex flex-col items-center border-b-[2px] border-[#151515] bg-[#F5F5F0] p-8">
-            <div className="flex size-24 items-center justify-center rounded-2xl border-[3px] border-[#151515] bg-[#FDE047] text-3xl font-black text-[#151515] shadow-[4px_4px_0_#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <div className="flex size-24 items-center justify-center rounded-2xl border-[3px] border-[#151515] bg-[#FDE047] text-3xl font-black text-[#151515] shadow-[4px_4px_0_#151515]" >
               {initials}
             </div>
-            <p className="mt-4 text-lg font-bold text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+            <p className="mt-4 text-lg font-bold text-[#151515]" >
               {formData.fullName || user.name}
             </p>
             <p className="mt-1 text-sm text-[#151515]/60">Người thuê</p>
@@ -153,7 +153,7 @@ export default function ThongTinPage() {
 
         <div className="p-6">
           <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-base font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>Thông tin tài khoản</h2>
+            <h2 className="text-base font-black text-[#151515]" >Thông tin tài khoản</h2>
             {!isEditing ? (
               <button
                 onClick={() => setIsEditing(true)}

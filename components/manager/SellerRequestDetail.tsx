@@ -189,7 +189,7 @@ export function SellerRequestDetail({ requestId }: SellerRequestDetailProps) {
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black text-[#151515]" style={{ fontFamily: "'Be Vietnam Pro', sans-serif" }}>
+              <h1 className="text-2xl font-black text-[#151515]" >
                 Chi tiết hồ sơ chủ trọ
               </h1>
               {getStatusBadge(request.status)}

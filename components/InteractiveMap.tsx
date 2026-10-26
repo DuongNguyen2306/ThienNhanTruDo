@@ -392,7 +392,7 @@ function MapInner({
           }}
         >
           <Popup>
-            <div style={{ fontFamily: 'system-ui', padding: '4px 0' }}>
+            <div style={{ fontFamily: 'var(--font-be-vietnam-pro), Arial, sans-serif', padding: '4px 0' }}>
               <p className="text-sm font-semibold">Vị trí phòng</p>
               <p className="text-xs text-slate-500">
                 {lat.toFixed(6)}, {lng.toFixed(6)}
