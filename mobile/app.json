@@ -9,7 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "vn.thiennhan.trudo"
+      "bundleIdentifier": "vn.thiennhan.trudo",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Thiên Nhãn cần quyền truy cập thư viện ảnh để bạn chọn ảnh phòng cho tin đăng."
+      }
     },
     "android": {
       "package": "vn.thiennhan.trudo",
@@ -27,6 +30,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Thiên Nhãn cần quyền truy cập thư viện ảnh để bạn chọn ảnh phòng cho tin đăng."
+        }
+      ],
       [
         "expo-splash-screen",
         {

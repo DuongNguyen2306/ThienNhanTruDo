@@ -8,8 +8,17 @@ const path = require('path');
 
 // Swagger UI
 const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./config/swagger');
 const openApiSpec = require('./config/openapi.json');
+
+// The spec is a static JSON file, so the "servers" entry is rewritten at
+// runtime to always point at the address this process is actually reachable
+// on. Without this, Swagger keeps calling the hard-coded localhost URL.
+openApiSpec.servers = [
+  {
+    url: config.apiBaseUrl,
+    description: 'Local Server',
+  },
+];
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -26,30 +35,27 @@ const websiteReviewRoutes = require('./routes/website-reviews');
 const app = express();
 
 // Middleware
-// CORS - cho phép nhiều origins
+// CORS - FE chạy trên Vercel (HTTPS), BE chạy local
 const allowedOrigins = [
-  'http://localhost:3000',           // Dev frontend
-  'http://localhost:5173',            // Vite dev
+  // Local development frontend
+  'http://localhost:3000',
+  'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
-  'https://thien-nhan-tru-do-kappa.vercel.app', // Production frontend
+  // Production frontend (Vercel)
+  'https://thien-nhan-tru-do-kappa.vercel.app',
 ];
 
-// Thêm production frontend URLs từ env (comma separated)
+// Thêm frontend URLs từ env (comma separated) nếu cần
 if (process.env.FRONTEND_URL) {
-    const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim());
+  const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim()).filter(Boolean);
   allowedOrigins.push(...extraUrls);
 }
 
-// `FRONTEND_URL=*` means "allow any origin" — it has to be handled as a
-// wildcard, because the origin check below is an exact match and the
-// literal string '*' would never equal a real Origin header.
-const allowAnyOrigin = allowedOrigins.includes('*');
-
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (curl, mobile apps, server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`CORS: Origin ${origin} not allowed`));
@@ -76,8 +82,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Swagger UI - bật trong cả development và production
-if (config.nodeEnv === 'development' || config.enableSwaggerInProduction) {
+// Swagger UI - chỉ bật trong development
+if (config.nodeEnv === 'development') {
   // OpenAPI JSON spec
   app.get('/api-docs.json', (req, res) => {
     res.json(openApiSpec);
@@ -135,6 +141,18 @@ app.listen(PORT, () => {
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
   `);
+
+  // If the mail transport has no usable credentials, say so loudly at boot
+  // instead of letting every OTP silently fail at runtime.
+  if (!config.email.configured) {
+    console.error(
+      '\n[EMAIL] ⚠️  Email transport is NOT configured — OTP e-mails will NOT be delivered.'
+    );
+    console.error(`[EMAIL]     provider: ${config.email.provider}`);
+    console.error(
+      '[EMAIL]     fix: set EMAIL_PROVIDER=smtp with SMTP_HOST/SMTP_USER/SMTP_PASS, or set RESEND_API_KEY.\n'
+    );
+  }
 
   // Start Star Expiration Scheduler
   if (config.nodeEnv === 'production' || config.enableStarScheduler) {

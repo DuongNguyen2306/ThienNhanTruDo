@@ -25,7 +25,7 @@ import { ArrowLeft, Images } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorState, LoadingState } from '@/components/ui';
-import { listingsApi } from '@/lib/api-client';
+import { listingsApi, resolveMediaUrl } from '@/lib/api-client';
 import { useAsyncData } from '@/hooks/use-async-data';
 import { borderWidth, colors, fontFamily, fontSize, radius, shadow, spacing } from '@/constants/theme';
 import type { Listing } from '@/types/listing';
@@ -110,7 +110,7 @@ export default function GalleryScreen() {
       >
         {photos.map((photo, photoIndex) => (
           <View key={`${photo}-${photoIndex}`} style={[styles.page, { width }]}>
-            <Image source={{ uri: photo }} style={styles.image} resizeMode="contain" />
+            <Image source={{ uri: resolveMediaUrl(photo) ?? photo }} style={styles.image} resizeMode="contain" />
           </View>
         ))}
       </ScrollView>
@@ -150,7 +150,7 @@ export default function GalleryScreen() {
                   photoIndex === index ? styles.thumbActive : null,
                 ]}
               >
-                <Image source={{ uri: photo }} style={styles.thumbImage} resizeMode="cover" />
+                <Image source={{ uri: resolveMediaUrl(photo) ?? photo }} style={styles.thumbImage} resizeMode="cover" />
               </Pressable>
             ))}
           </ScrollView>

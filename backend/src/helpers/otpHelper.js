@@ -53,6 +53,18 @@ function otpKey(purpose, email) {
   return `otp:${purpose}:${hashIdentifier(email)}`;
 }
 
+/**
+ * Key of the per-e-mail send log.
+ *
+ * The OTP record itself is DELETED on consumption/expiry, so it cannot be
+ * used to count how many times a code was requested. The send log is a
+ * separate, small document that survives the OTP lifecycle and stores the
+ * timestamps of the recent sends for ONE (purpose, email) pair.
+ */
+function otpSendLogKey(purpose, email) {
+  return `otp_log:${purpose}:${hashIdentifier(email)}`;
+}
+
 function pendingRegKey(phone) {
   return `pending_reg:${hashIdentifier(phone)}`;
 }
@@ -167,14 +179,25 @@ async function issueOtp({ email, purpose, payload = null, ip = null, userAgent =
     }
   }
 
-  // Hourly send throttle
-  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const sentRecently = await prisma.systemConfig.findMany({
-    where: { key: { startsWith: `otp:${purpose}:` }, updatedAt: { gte: hourAgo } },
-    select: { key: true },
-  });
-  if (sentRecently.length >= OTP_MAX_SENDS_PER_HOUR) {
-    return { ok: false, reason: 'throttled', retryAfter: 3600 };
+  // Hourly send throttle — scoped to THIS e-mail, not to every account.
+  //
+  // The previous implementation counted every `otp:<purpose>:*` record
+  // modified in the last hour, which meant that a handful of users
+  // registering from different addresses exhausted the quota for EVERYONE
+  // ("Bạn đã yêu cầu quá nhiều mã xác thực"). The throttle must be
+  // per (purpose, email) pair, so the send log is kept per address.
+  const logKey = otpSendLogKey(purpose, email);
+  const log = await readRecord(logKey);
+  const sentTimestamps = Array.isArray(log?.sentAt)
+    ? log.sentAt.map((t) => new Date(t).getTime()).filter((t) => !Number.isNaN(t))
+    : [];
+  const hourAgo = now.getTime() - 60 * 60 * 1000;
+  const sentInWindow = sentTimestamps.filter((t) => t >= hourAgo);
+  if (sentInWindow.length >= OTP_MAX_SENDS_PER_HOUR) {
+    // Retry after the oldest send in the window rolls out of it.
+    const oldest = Math.min(...sentInWindow);
+    const retryAfter = Math.max(1, Math.ceil((oldest + 60 * 60 * 1000 - now.getTime()) / 1000));
+    return { ok: false, reason: 'throttled', retryAfter };
   }
 
   const code = generateOtpCode();
@@ -192,6 +215,10 @@ async function issueOtp({ email, purpose, payload = null, ip = null, userAgent =
 
   await writeRecord(key, record, `OTP ${purpose}`);
 
+  // Append to the per-e-mail send log (used only for the hourly throttle).
+  const updatedLog = [...sentInWindow, now.getTime()];
+  await writeRecord(logKey, { sentAt: updatedLog }, `OTP send log ${purpose}`);
+
   // The raw code is returned ONLY to the caller (the mailer). It is never
   // persisted and never logged.
   return {
@@ -201,6 +228,36 @@ async function issueOtp({ email, purpose, payload = null, ip = null, userAgent =
     expiresAt: new Date(record.expiresAt),
     resendAvailableIn: OTP_RESEND_COOLDOWN_SECONDS,
   };
+}
+
+/**
+ * Roll back a send attempt that could NOT be delivered.
+ *
+ * When the mail transport fails, the OTP was still created and the hourly
+ * send quota was still consumed. Without this rollback the user is punished
+ * for a provider-side failure: every retry eats another quota slot until
+ * they are permanently throttled, even though no e-mail ever left the
+ * server. Releasing the slot lets them retry immediately.
+ *
+ * @returns {Promise<void>}
+ */
+async function revokeOtpSend({ email, purpose }) {
+  await deleteRecord(otpKey(purpose, email));
+
+  const logKey = otpSendLogKey(purpose, email);
+  const log = await readRecord(logKey);
+  if (!log || !Array.isArray(log.sentAt)) return;
+
+  const remaining = log.sentAt
+    .map((t) => new Date(t).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .slice(0, -1); // drop the most recent (failed) send
+
+  if (remaining.length === 0) {
+    await deleteRecord(logKey);
+  } else {
+    await writeRecord(logKey, { sentAt: remaining }, `OTP send log ${purpose}`);
+  }
 }
 
 /**
@@ -270,7 +327,7 @@ async function getOtpStatus(email, purpose) {
   };
 }
 
-/** Remove expired OTP records. Safe to call periodically. */
+/** Remove expired OTP records and stale send logs. Safe to call periodically. */
 async function cleanupExpiredOtps() {
   const rows = await prisma.systemConfig.findMany({
     where: { key: { startsWith: 'otp:' } },
@@ -283,6 +340,30 @@ async function cleanupExpiredOtps() {
       if (parsed.expiresAt && new Date(parsed.expiresAt).getTime() < Date.now()) {
         await prisma.systemConfig.deleteMany({ where: { key: row.key } });
         removed += 1;
+      }
+    } catch {
+      await prisma.systemConfig.deleteMany({ where: { key: row.key } });
+      removed += 1;
+    }
+  }
+
+  // Send logs are pruned once every entry is older than the throttle window.
+  const logRows = await prisma.systemConfig.findMany({
+    where: { key: { startsWith: 'otp_log:' } },
+    select: { key: true, value: true },
+  });
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  for (const row of logRows) {
+    try {
+      const parsed = JSON.parse(row.value);
+      const kept = (Array.isArray(parsed.sentAt) ? parsed.sentAt : [])
+        .map((t) => new Date(t).getTime())
+        .filter((t) => !Number.isNaN(t) && t >= hourAgo);
+      if (kept.length === 0) {
+        await prisma.systemConfig.deleteMany({ where: { key: row.key } });
+        removed += 1;
+      } else if (kept.length !== (parsed.sentAt || []).length) {
+        await writeRecord(row.key, { sentAt: kept }, 'OTP send log');
       }
     } catch {
       await prisma.systemConfig.deleteMany({ where: { key: row.key } });
@@ -397,7 +478,9 @@ module.exports = {
   hashIdentifier,
   safeEqual,
   otpKey,
+  otpSendLogKey,
   issueOtp,
+  revokeOtpSend,
   verifyOtp,
   getOtpStatus,
   cleanupExpiredOtps,

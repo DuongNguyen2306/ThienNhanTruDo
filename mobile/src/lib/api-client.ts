@@ -53,7 +53,13 @@ export const REQUEST_TIMEOUT_MS = 15000;
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: REQUEST_TIMEOUT_MS,
-  headers: { 'Content-Type': 'application/json' },
+  // The `Content-Type` is deliberately NOT pinned here.
+  //
+  // Axios v1 transforms a `FormData` body into a JSON string whenever the
+  // request carries `application/json` — which would destroy the upload.
+  // Leaving the header unset lets Axios set `application/json` for plain
+  // objects and `multipart/form-data; boundary=…` for a `FormData`, which
+  // is exactly what the multer endpoint needs.
 });
 
 /**
@@ -466,6 +472,11 @@ export const sellerApi = {
    * `photo` items are the objects React Native's `FormData` accepts
    * (`{ uri, name, type }`). The backend answers with the public URLs,
    * which are then sent as the listing's `photos` array.
+   *
+   * The `Content-Type` header is deliberately NOT set here: `multipart/
+   * form-data` needs the boundary that axios generates, and a hand-written
+   * header without it makes the server unable to parse the body. Axios sets
+   * the correct header itself as soon as the request body is a `FormData`.
    */
   uploadPhotos: (files: Array<{ uri: string; name: string; type: string }>, listingId?: string) => {
     const body = new FormData();
@@ -476,9 +487,7 @@ export const sellerApi = {
     if (listingId) body.append('listingId', listingId);
 
     return request<{ success: boolean; files: SellerUploadedFile[]; message: string }>(() =>
-      apiClient.post('/api/seller/upload', body, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }),
+      apiClient.post('/api/seller/upload', body),
     );
   },
 };
@@ -527,12 +536,43 @@ export const notificationsApi = {
 /**
  * Turn a stored photo path into an absolute URL.
  *
- * The backend stores `/uploads/<sellerId>/<file>` and returns full URLs on
- * upload, but older rows may still hold the relative form.
+ * The backend answers an upload with a FULL URL built from its own idea of
+ * the public host — `http://localhost:3005/uploads/…` when it sees no
+ * forwarded host. On a physical phone `localhost` is the PHONE itself, so
+ * that URL can never load. The host of the API the app is talking to is
+ * therefore always used for the `/uploads` paths.
+ *
+ * Rows created by the website keep the relative form
+ * (`/uploads/<sellerId>/<file>`) and rows created by the app keep the
+ * absolute form; both are handled here.
  */
 export function resolveMediaUrl(path: string | null | undefined): string | null {
   if (!path) return null;
-  if (/^https?:\/\//i.test(path) || path.startsWith('data:')) return path;
+  if (path.startsWith('data:')) return path;
+
+  /**
+   * Every uploaded file is served by the backend under `/uploads/…`.
+   *
+   * The absolute URL the backend handed out can point at a host the phone
+   * cannot reach — a deployment URL, `localhost` (which is the PHONE itself
+   * on a device), or a proxy. The file is always served by the SAME backend
+   * the app is talking to, so the path is re-hosted on the configured API
+   * and the old host is dropped.
+   */
+  const uploadsIndex = path.indexOf('/uploads/');
+  if (uploadsIndex !== -1) {
+    return `${API_BASE_URL}${path.slice(uploadsIndex)}`;
+  }
+
+  // An absolute URL that already points at the configured API is fine.
+  if (/^https?:\/\//i.test(path)) {
+    const apiHost = API_BASE_URL.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    if (apiHost && path.includes(apiHost)) return path;
+
+    // Any other absolute URL (a CDN, an external image) is kept as is.
+    return path;
+  }
+
   return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
 }
 

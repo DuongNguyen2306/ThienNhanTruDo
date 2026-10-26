@@ -49,9 +49,8 @@ if (nodeEnv === 'production') {
 }
 
 module.exports = {
-  port: process.env.PORT || 3001,
+  port: process.env.PORT || 3005,
   nodeEnv,
-  enableSwaggerInProduction: process.env.ENABLE_SWAGGER === 'true',
   jwt: {
     secret: jwtSecret,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -59,6 +58,7 @@ module.exports = {
   database: {
     url: process.env.DATABASE_URL || 'file:./dev.db',
   },
+  apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:3005',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   vnpay: {
     hashSecret: vnpayHashSecret,

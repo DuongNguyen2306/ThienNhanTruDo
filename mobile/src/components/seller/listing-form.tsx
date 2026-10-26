@@ -7,21 +7,25 @@
  * description column, so no description field is offered — sending one
  * would be silently dropped.
  *
- * Photos: the backend accepts uploads on `POST /api/seller/upload`, but
- * this build has no image-picker module installed (adding a native module
- * would break the Expo Go workflow). The form therefore shows the photos
- * that already exist on the listing and lets the seller remove them; new
- * photos cannot be attached from the device yet, and the UI says so
- * instead of pretending an upload happened.
+ * Photos: the form shows two kinds of photos side by side.
+ *
+ *   - the URLs already stored on the server (`values.photos`)
+ *   - the files just picked on the device (`values.newPhotos`), which are
+ *     local `file://` URIs and are NOT part of the payload
+ *
+ * The picked files are uploaded through `POST /api/seller/upload` by the
+ * screen that owns the form; only the returned URLs are ever written to
+ * `Listing.photos`. A local URI never reaches the backend.
  */
 
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ImagePlus, X } from 'lucide-react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ImagePlus, Loader2, X } from 'lucide-react-native';
 
 import { AppButton, AppCard, AppInput } from '@/components/ui';
 import { FilterChip } from '@/components/tenant';
 import { resolveMediaUrl } from '@/lib/api-client';
+import { MAX_LISTING_PHOTOS, type LocalPhoto } from '@/hooks/use-listing-photos';
 import { AMENITY_OPTIONS, DIRECTION_OPTIONS, ROOM_TYPE_OPTIONS } from '@/lib/seller-format';
 import { borderWidth, colors, fontFamily, fontSize, radius, spacing } from '@/constants/theme';
 
@@ -53,6 +57,8 @@ export interface ListingFormValues {
   pets: boolean;
   amenities: string[];
   photos: string[];
+  /** Files picked on the device, not yet uploaded. Never sent as URLs. */
+  newPhotos: LocalPhoto[];
 }
 
 export const EMPTY_LISTING_FORM: ListingFormValues = {
@@ -82,6 +88,7 @@ export const EMPTY_LISTING_FORM: ListingFormValues = {
   pets: false,
   amenities: [],
   photos: [],
+  newPhotos: [],
 };
 
 export type ListingFormErrors = Partial<Record<keyof ListingFormValues, string>>;
@@ -98,6 +105,16 @@ export interface ListingFormProps {
   formError?: string | null;
   /** Extra content rendered above the submit button (e.g. a notice). */
   footerNote?: React.ReactNode;
+  /** Opens the photo library so the seller can pick more images. */
+  onPickPhotos: () => void;
+  /** Removes a photo that is already stored on the server. */
+  onRemovePhoto: (url: string) => void;
+  /** Removes a file that was just picked on the device. */
+  onRemoveNewPhoto: (uri: string) => void;
+  /** True while the picked files are being uploaded. */
+  isUploadingPhotos?: boolean;
+  /** The last photo error, or `null`. */
+  photoError?: string | null;
 }
 
 /** Parse an optional non-negative number, or `undefined` when blank. */
@@ -224,6 +241,11 @@ export function ListingForm({
   onSubmit,
   formError,
   footerNote,
+  onPickPhotos,
+  onRemovePhoto,
+  onRemoveNewPhoto,
+  isUploadingPhotos = false,
+  photoError = null,
 }: ListingFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -238,12 +260,10 @@ export function ListingForm({
     set('amenities', next);
   };
 
-  const removePhoto = (url: string) => {
-    set(
-      'photos',
-      values.photos.filter((item) => item !== url),
-    );
-  };
+  /** How many slots are in use — stored photos plus the freshly picked ones. */
+  const photoCount = values.photos.length + values.newPhotos.length;
+  /** The empty slots rendered with a "+" — always at least one. */
+  const emptySlots = Math.max(1, Math.min(4, MAX_LISTING_PHOTOS - photoCount));
 
   return (
     <View style={styles.root}>
@@ -429,38 +449,113 @@ export function ListingForm({
       </AppCard>
 
       <AppCard style={styles.card}>
-        <SectionLabel label="Ảnh phòng" />
+        <View style={styles.photoHeader}>
+          <Text style={[styles.sectionLabel, styles.photoSectionLabel, { fontFamily: fontFamily.extrabold }]}>
+            ẢNH PHÒNG
+          </Text>
+          <Text style={[styles.photoCount, { fontFamily: fontFamily.bold }]}>
+            {photoCount}/{MAX_LISTING_PHOTOS}
+          </Text>
+        </View>
 
-        {values.photos.length > 0 ? (
-          <View style={styles.photoGrid}>
-            {values.photos.map((url) => (
-              <View key={url} style={styles.photoWrap}>
-                <Image
-                  source={{ uri: resolveMediaUrl(url) ?? url }}
-                  style={styles.photo}
-                  resizeMode="cover"
-                />
-                <Pressable
-                  onPress={() => removePhoto(url)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Xóa ảnh"
-                  hitSlop={6}
-                  style={styles.photoRemove}
-                >
-                  <X size={12} color={colors.surface} strokeWidth={3} />
-                </Pressable>
+        {/* --- The grid: stored photos, picked photos, then empty slots --- */}
+        <View style={styles.photoGrid}>
+          {values.photos.map((url, index) => (
+            <View key={`stored-${url}`} style={styles.photoWrap}>
+              <Image
+                source={{ uri: resolveMediaUrl(url) ?? url }}
+                style={styles.photo}
+                resizeMode="cover"
+              />
+              {index === 0 ? (
+                <View style={styles.photoCoverBadge}>
+                  <Text style={[styles.photoCoverText, { fontFamily: fontFamily.bold }]}>ẢNH BÌA</Text>
+                </View>
+              ) : null}
+              <Pressable
+                onPress={() => onRemovePhoto(url)}
+                accessibilityRole="button"
+                accessibilityLabel="Xóa ảnh"
+                hitSlop={6}
+                style={styles.photoRemove}
+              >
+                <X size={12} color={colors.surface} strokeWidth={3} />
+              </Pressable>
+            </View>
+          ))}
+
+          {values.newPhotos.map((photo) => (
+            <View key={`new-${photo.uri}`} style={styles.photoWrap}>
+              <Image source={{ uri: photo.uri }} style={styles.photo} resizeMode="cover" />
+              <View style={styles.photoNewBadge}>
+                <Text style={[styles.photoNewText, { fontFamily: fontFamily.bold }]}>MỚI</Text>
               </View>
-            ))}
+              <Pressable
+                onPress={() => onRemoveNewPhoto(photo.uri)}
+                accessibilityRole="button"
+                accessibilityLabel="Xóa ảnh"
+                hitSlop={6}
+                style={styles.photoRemove}
+              >
+                <X size={12} color={colors.surface} strokeWidth={3} />
+              </Pressable>
+            </View>
+          ))}
+
+          {/* Empty slots carry a "+" and open the photo library. */}
+          {Array.from({ length: emptySlots }).map((_, index) => (
+            <Pressable
+              key={`empty-${index}`}
+              onPress={onPickPhotos}
+              disabled={isUploadingPhotos}
+              accessibilityRole="button"
+              accessibilityLabel="Thêm ảnh từ thư viện"
+              style={({ pressed }) => [
+                styles.photoSlot,
+                pressed ? styles.photoSlotPressed : null,
+                isUploadingPhotos ? styles.photoSlotDisabled : null,
+              ]}
+            >
+              {isUploadingPhotos ? (
+                <ActivityIndicator size="small" color={colors.ink} />
+              ) : (
+                <ImagePlus size={18} color={colors.ink} strokeWidth={2.8} />
+              )}
+            </Pressable>
+          ))}
+        </View>
+
+        {photoError ? (
+          <View style={styles.photoError}>
+            <Text style={[styles.photoErrorText, { fontFamily: fontFamily.medium }]}>{photoError}</Text>
           </View>
         ) : null}
 
-        <View style={styles.uploadNotice}>
-          <ImagePlus size={16} color={colors.textMuted} strokeWidth={2.5} />
-          <Text style={[styles.uploadNoticeText, { fontFamily: fontFamily.regular }]}>
-            Tải ảnh mới từ thiết bị chưa được hỗ trợ trong bản này. Bạn có thể xóa ảnh hiện có
-            hoặc thêm ảnh trên website.
-          </Text>
-        </View>
+        <AppButton
+          label={
+            isUploadingPhotos
+              ? 'Đang tải ảnh…'
+              : photoCount >= MAX_LISTING_PHOTOS
+                ? 'Đã đủ 12 ảnh'
+                : `Thêm ảnh từ thư viện (${photoCount}/${MAX_LISTING_PHOTOS})`
+          }
+          variant="secondary"
+          size="sm"
+          fullWidth
+          disabled={isUploadingPhotos || photoCount >= MAX_LISTING_PHOTOS}
+          onPress={onPickPhotos}
+          style={styles.photoButton}
+          trailingIcon={<ImagePlus size={15} color={colors.ink} strokeWidth={2.8} />}
+        />
+
+        {isUploadingPhotos ? (
+          <View style={styles.uploadingRow}>
+            <Loader2 size={13} color={colors.textMuted} strokeWidth={2.6} />
+            <Text style={[styles.uploadingText, { fontFamily: fontFamily.regular }]}>
+              Đang tải ảnh lên máy chủ, vui lòng không đóng ứng dụng.
+            </Text>
+          </View>
+        ) : null}
       </AppCard>
 
       <Pressable
@@ -643,6 +738,98 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /** An empty slot — a dashed "+" tile that opens the photo library. */
+  photoSlot: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.sm,
+    borderWidth: borderWidth.md,
+    borderStyle: 'dashed',
+    borderColor: colors.ink,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoSlotPressed: {
+    opacity: 0.7,
+  },
+  photoSlotDisabled: {
+    opacity: 0.5,
+  },
+  photoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  photoSectionLabel: {
+    marginBottom: 0,
+  },
+  photoCount: {
+    fontSize: fontSize.sm,
+    color: colors.ink,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    borderWidth: borderWidth.sm,
+    borderColor: colors.ink,
+    backgroundColor: colors.primary,
+  },
+  photoCoverBadge: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    backgroundColor: colors.ink,
+  },
+  photoCoverText: {
+    fontSize: 7,
+    color: colors.surface,
+    letterSpacing: 0.4,
+  },
+  photoNewBadge: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    backgroundColor: colors.info,
+  },
+  photoNewText: {
+    fontSize: 7,
+    color: colors.surface,
+    letterSpacing: 0.4,
+  },
+  photoError: {
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: borderWidth.sm,
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSurface,
+  },
+  photoErrorText: {
+    fontSize: fontSize.xs,
+    color: colors.danger,
+    lineHeight: 17,
+  },
+  photoButton: {
+    marginTop: spacing.xs,
+  },
+  uploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  uploadingText: {
+    flex: 1,
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    lineHeight: 17,
   },
   uploadNotice: {
     flexDirection: 'row',

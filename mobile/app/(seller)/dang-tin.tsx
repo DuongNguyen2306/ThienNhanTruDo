@@ -27,6 +27,7 @@ import {
   type ListingFormErrors,
   type ListingFormValues,
 } from '@/components/seller';
+import { useListingPhotos } from '@/hooks/use-listing-photos';
 import { sellerApi } from '@/lib/api-client';
 import { borderWidth, colors, fontFamily, fontSize, radius, spacing } from '@/constants/theme';
 
@@ -41,6 +42,18 @@ export default function CreateListingScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  /**
+   * The photo flow.
+   *
+   * The hook is controlled: it reads `values.photos` / `values.newPhotos`
+   * and writes every change back through `setValues`. The picked files are
+   * uploaded BEFORE the listing is created, so the created row already
+   * carries the real public URLs.
+   */
+  const photos = useListingPhotos(
+    { value: { photos: values.photos, newPhotos: values.newPhotos }, onChange: (next) => setValues((current) => ({ ...current, photos: next.photos, newPhotos: next.newPhotos })) },
+  );
 
   /** Guards against a double submit from two fast taps. */
   const inFlight = useRef(false);
@@ -70,8 +83,16 @@ export default function CreateListingScreen() {
     setSubmitting(true);
 
     try {
+      // 1) Upload the picked photos first. Their public URLs are the only
+      //    thing that may be written into the listing.
+      const uploaded = await photos.uploadNewPhotos();
+
+      // 2) Create the listing with the stored photos plus the uploaded ones.
       const payload = listingFormToPayload(values);
-      const result = await sellerApi.createListing(payload);
+      const result = await sellerApi.createListing({
+        ...payload,
+        photos: [...values.photos, ...uploaded],
+      });
 
       // Success is announced only after the backend confirmed.
       setSuccessMessage(result.message || 'Tạo tin đăng thành công, đang chờ duyệt.');
@@ -90,7 +111,7 @@ export default function CreateListingScreen() {
       inFlight.current = false;
       setSubmitting(false);
     }
-  }, [router, values]);
+  }, [photos, router, values]);
 
   return (
     <View style={styles.flex}>
@@ -146,6 +167,11 @@ export default function CreateListingScreen() {
             submitting={submitting || successMessage !== null}
             onSubmit={handleSubmit}
             formError={formError}
+            onPickPhotos={() => void photos.pickPhotos()}
+            onRemovePhoto={photos.removePhoto}
+            onRemoveNewPhoto={photos.removeNewPhoto}
+            isUploadingPhotos={photos.isUploading}
+            photoError={photos.error}
           />
         </ScrollView>
       </KeyboardAvoidingView>

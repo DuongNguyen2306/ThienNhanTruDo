@@ -13,6 +13,7 @@ import { Image, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyl
 import { BadgeCheck, Crown, Heart, MapPin, Ruler } from 'lucide-react-native';
 
 import { StatusBadge } from '@/components/ui/status-badge';
+import { resolveMediaUrl } from '@/lib/api-client';
 import { borderWidth, colors, fontFamily, fontSize, radius, shadow, spacing } from '@/constants/theme';
 import { formatArea, formatRent, formatShortAddress } from '@/lib/format';
 import type { Listing } from '@/types/listing';
@@ -30,10 +31,18 @@ export interface ListingCardProps {
   style?: StyleProp<ViewStyle>;
 }
 
-/** The first photo of the listing, or `null` when there is none. */
+/**
+ * The first photo of the listing, or `null` when there is none.
+ *
+ * The path is resolved to an absolute URL: the backend stores the relative
+ * form (`/uploads/…`) for some rows and the full URL for others, so the
+ * card never guesses — `resolveMediaUrl` handles both.
+ */
 export function listingPhoto(listing: Listing): string | null {
-  if (listing.photos && listing.photos.length > 0) return listing.photos[0] ?? null;
-  if (listing.image) return listing.image;
+  if (listing.photos && listing.photos.length > 0) {
+    return resolveMediaUrl(listing.photos[0]);
+  }
+  if (listing.image) return resolveMediaUrl(listing.image);
   return null;
 }
 

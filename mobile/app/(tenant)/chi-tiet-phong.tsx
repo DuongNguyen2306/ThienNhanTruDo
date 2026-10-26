@@ -41,7 +41,7 @@ import {
 } from 'lucide-react-native';
 
 import { AppButton, ErrorState, LoadingState, StatusBadge } from '@/components/ui';
-import { listingsApi, tenantApi } from '@/lib/api-client';
+import { listingsApi, resolveMediaUrl, tenantApi } from '@/lib/api-client';
 import { useAsyncData } from '@/hooks/use-async-data';
 import {
   formatAddress,
@@ -190,7 +190,11 @@ export default function RoomDetailScreen() {
         <Pressable onPress={openGallery} accessibilityRole="imagebutton" accessibilityLabel="Xem thư viện ảnh">
           <View style={styles.coverWrap}>
             {photos.length > 0 ? (
-              <Image source={{ uri: photos[0] }} style={styles.cover} resizeMode="cover" />
+              <Image
+                source={{ uri: resolveMediaUrl(photos[0]) ?? photos[0] }}
+                style={styles.cover}
+                resizeMode="cover"
+              />
             ) : (
               <View style={[styles.cover, styles.coverFallback]}>
                 <Text style={[styles.coverFallbackText, { fontFamily: fontFamily.bold }]}>

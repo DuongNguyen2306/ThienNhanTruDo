@@ -102,6 +102,18 @@ async function sendViaSmtp({ to, subject, html, text }) {
     // Log the reason, never the credential. err.message from nodemailer can
     // contain the server response but never the password itself.
     console.error('[email] SMTP send failed:', err?.code || err?.message);
+    // Translate the transport-level failure into an actionable message so the
+    // API never claims success when the mail was not delivered.
+    const code = err?.code || '';
+    if (code === 'EAUTH' || code === 'EENVELOPE' || code === 'ECONNECTION') {
+      return { ok: false, error: 'Máy chủ email từ chối kết nối. Vui lòng thử lại sau.' };
+    }
+    if (code === 'ETIMEDOUT' || code === 'ESOCKET') {
+      return { ok: false, error: 'Không kết nối được máy chủ email. Vui lòng thử lại sau.' };
+    }
+    if (code === 'EMESSAGE' || code === 'EENVELOPE') {
+      return { ok: false, error: 'Máy chủ email từ chối thư. Vui lòng thử lại sau.' };
+    }
     return { ok: false, error: 'Không gửi được email' };
   }
 }
@@ -111,18 +123,32 @@ async function sendViaSmtp({ to, subject, html, text }) {
  */
 async function sendViaResend({ to, subject, html, text, devCode }) {
   if (!RESEND_API_KEY) {
-    if (isProd) {
-      // Fail closed: never claim success without a delivery mechanism.
-      console.error('[email] RESEND_API_KEY is not configured — refusing to send in production');
-      return { ok: false, error: 'Email provider chưa được cấu hình' };
+    // Fail closed by default.
+    //
+    // The previous behaviour logged the code to the console and returned
+    // `{ ok: true }`. That made the API answer "Đã gửi mã xác thực" while NO
+    // e-mail was ever delivered — the user simply never received the OTP and
+    // had no idea why. Only an explicit opt-in may use the console fallback,
+    // and even then the result is flagged as `devOnly` so callers can tell
+    // that nothing was actually delivered.
+    const allowDevConsole = String(process.env.ALLOW_DEV_EMAIL_CONSOLE || '').toLowerCase() === 'true';
+    if (allowDevConsole && !isProd) {
+      if (devCode) {
+        console.log(`[email:dev] to=${to} subject="${subject}" code=${devCode}`);
+      } else {
+        console.log(`[email:dev] to=${to} subject="${subject}" (no body)`);
+      }
+      return { ok: true, devOnly: true, devCode };
     }
-    // Development fallback: surface the code on the console only.
-    if (devCode) {
-      console.log(`[email:dev] to=${to} subject="${subject}" code=${devCode}`);
-    } else {
-      console.log(`[email:dev] to=${to} subject="${subject}" (no body)`);
-    }
-    return { ok: true, devOnly: true, devCode };
+
+    console.error(
+      '[email] RESEND_API_KEY is not configured — no e-mail was delivered. ' +
+        'Set EMAIL_PROVIDER=smtp (local development) or configure RESEND_API_KEY.'
+    );
+    return {
+      ok: false,
+      error: 'Dịch vụ email chưa được cấu hình (thiếu RESEND_API_KEY). Vui lòng thử lại sau.',
+    };
   }
 
   try {
@@ -308,12 +334,35 @@ function isEmailConfigured() {
   return Boolean(RESEND_API_KEY);
 }
 
+/**
+ * Human-readable description of why the transport is unusable, or null when
+ * it is ready to send. Never contains credentials.
+ */
+function emailConfigProblem() {
+  if (PROVIDER === 'smtp') {
+    const missing = [];
+    if (!SMTP_HOST) missing.push('SMTP_HOST');
+    if (!SMTP_USER) missing.push('SMTP_USER');
+    if (!SMTP_PASS) missing.push('SMTP_PASS');
+    if (!SMTP_FROM) missing.push('SMTP_FROM_EMAIL');
+    if (missing.length) {
+      return `Cấu hình email thiếu: ${missing.join(', ')}`;
+    }
+    return null;
+  }
+  if (!RESEND_API_KEY) {
+    return 'Cấu hình email thiếu: RESEND_API_KEY (hoặc đặt EMAIL_PROVIDER=smtp)';
+  }
+  return null;
+}
+
 module.exports = {
   sendOtpEmail,
   sendWelcomeEmail,
   sendPasswordChangedEmail,
   sendPasswordResetEmail,
   isEmailConfigured,
+  emailConfigProblem,
   verifySmtpTransport,
   provider: PROVIDER,
   RESEND_FROM,

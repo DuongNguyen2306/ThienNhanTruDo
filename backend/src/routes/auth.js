@@ -224,6 +224,10 @@ router.post(
       });
 
       if (!sent.ok) {
+        // The code could not be delivered. Release the send quota so the
+        // user can retry immediately instead of being throttled for a
+        // provider-side failure, and never claim success.
+        await otpHelper.revokeOtpSend({ email: normalizedEmail, purpose: 'register_verify' });
         // Do NOT leak delivery details. The account is still unverified.
         return res.status(503).json({
           error: 'Không gửi được mã xác thực. Vui lòng thử lại sau.',
@@ -387,6 +391,9 @@ router.post(
       });
 
       if (!sent.ok) {
+        // Release the send quota: a provider-side failure must not consume
+        // the user's hourly allowance.
+        await otpHelper.revokeOtpSend({ email: normalizedEmail, purpose: 'register_verify' });
         return res.status(503).json({ error: 'Không gửi được mã xác thực. Vui lòng thử lại sau.' });
       }
 
@@ -620,6 +627,9 @@ router.put(
           });
 
           if (!sent.ok) {
+            // Release the send quota: a provider-side failure must not
+            // consume the user's hourly allowance.
+            await otpHelper.revokeOtpSend({ email: normalizedEmail, purpose: 'email_change' });
             return res.status(503).json({ error: 'Không gửi được mã xác thực. Vui lòng thử lại sau.' });
           }
 
@@ -823,6 +833,9 @@ router.post(
       });
 
       if (!sent.ok) {
+        // Release the send quota: a provider-side failure must not consume
+        // the user's hourly allowance.
+        await otpHelper.revokeOtpSend({ email: pendingEmail, purpose: 'email_change' });
         return res.status(503).json({ error: 'Không gửi được mã xác thực. Vui lòng thử lại sau.' });
       }
 
@@ -972,9 +985,11 @@ router.post(
       });
 
       if (!sent.ok) {
-        // The code could not be delivered. Do NOT fall through to the generic
+        // The code could not be delivered. Release the send quota so the
+        // user can retry immediately, and do NOT fall through to the generic
         // success message, because the user would then wait for an e-mail
         // that will never arrive.
+        await otpHelper.revokeOtpSend({ email: user.email, purpose: 'password_reset' });
         return res.status(503).json({
           error: 'Không gửi được mã xác thực. Vui lòng thử lại sau.',
         });
@@ -1134,6 +1149,9 @@ router.post(
       });
 
       if (!sent.ok) {
+        // Release the send quota: a provider-side failure must not consume
+        // the user's hourly allowance.
+        await otpHelper.revokeOtpSend({ email: user.email, purpose: 'password_reset' });
         return res.status(503).json({ error: 'Không gửi được mã. Vui lòng thử lại sau.' });
       }
 

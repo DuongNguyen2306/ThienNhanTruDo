@@ -42,6 +42,7 @@ import {
   type ListingFormValues,
 } from '@/components/seller';
 import { useAsyncData } from '@/hooks/use-async-data';
+import { useListingPhotos } from '@/hooks/use-listing-photos';
 import { sellerApi } from '@/lib/api-client';
 import { listingStatusLabel, listingStatusVariant } from '@/lib/seller-format';
 import { borderWidth, colors, fontFamily, fontSize, radius, spacing } from '@/constants/theme';
@@ -82,6 +83,7 @@ function listingToForm(listing: SellerListing): ListingFormValues {
     pets: listing.pets ?? false,
     amenities: Array.isArray(listing.amenities) ? listing.amenities : [],
     photos: Array.isArray(listing.photos) ? listing.photos : [],
+    newPhotos: [],
   };
 }
 
@@ -107,6 +109,19 @@ export default function EditListingScreen() {
   }, [listingId]);
 
   const { data: listing, isLoading, error, reload } = useAsyncData<SellerListing>(fetcher, [listingId]);
+
+  /**
+   * The photo flow.
+   *
+   * Controlled by the form state, exactly like on the create screen. The
+   * picked files are uploaded BEFORE the listing is updated, so the saved
+   * row always carries real public URLs — never a local `file://` path.
+   */
+  const photos = useListingPhotos({
+    value: { photos: values.photos, newPhotos: values.newPhotos },
+    onChange: (next) =>
+      setValues((current) => ({ ...current, photos: next.photos, newPhotos: next.newPhotos })),
+  });
 
   // Fill the form once per listing — re-rendering must not wipe what the
   // seller has already typed.
@@ -142,8 +157,16 @@ export default function EditListingScreen() {
     setSubmitting(true);
 
     try {
+      // 1) Upload the picked photos first. If this fails, the listing is
+      //    NOT touched and the old photos stay exactly as they were.
+      const uploaded = await photos.uploadNewPhotos();
+
+      // 2) Save the listing with the kept photos plus the uploaded ones.
       const payload = listingFormToPayload(values);
-      const result = await sellerApi.updateListing(listingId, payload);
+      const result = await sellerApi.updateListing(listingId, {
+        ...payload,
+        photos: [...values.photos, ...uploaded],
+      });
 
       const status = result.listing?.status;
       setSuccessMessage(
@@ -165,7 +188,7 @@ export default function EditListingScreen() {
       inFlight.current = false;
       setSubmitting(false);
     }
-  }, [listingId, router, values]);
+  }, [listingId, photos, router, values]);
 
   const statusBadge = useMemo(() => {
     if (!listing?.status) return null;
@@ -252,6 +275,11 @@ export default function EditListingScreen() {
               submitting={submitting || successMessage !== null}
               onSubmit={handleSubmit}
               formError={formError}
+              onPickPhotos={() => void photos.pickPhotos()}
+              onRemovePhoto={photos.removePhoto}
+              onRemoveNewPhoto={photos.removeNewPhoto}
+              isUploadingPhotos={photos.isUploading}
+              photoError={photos.error}
             />
           </ScrollView>
         )}
