@@ -11,6 +11,7 @@ import { BrutalFooter } from '@/components/brutal-footer'
 import { BrutalListingCard } from '@/components/brutal-listing-card'
 import { listingApi, type Listing as ApiListing } from '@/lib/api'
 import { formatVnd } from '@/lib/data'
+import { trackEvent, safeSearchTerm } from '@/lib/analytics'
 
 // Dynamic import RealMap (Leaflet requires client-side only)
 const RealMap = dynamic(() => import('@/components/RealMap').then((m) => m.RealMap), {
@@ -96,6 +97,18 @@ export default function SearchPage() {
       const data = await listingApi.search(params as any)
       setListings(data.listings ?? [])
       setTotalCount(data.pagination?.total ?? data.listings?.length ?? 0)
+      // GA4: ghi nhan tu khoa tim kiem + so ket qua (khong gui PII).
+      // Chi ban khi co tu khoa that, tranh spam event khi doi bo loc.
+      if (searchQuery.trim()) {
+        trackEvent('search', {
+          search_term: safeSearchTerm(searchQuery),
+          result_count: data.pagination?.total ?? data.listings?.length ?? 0,
+          room_type: selectedTypes[0] ?? 'all',
+          price_min: priceMin ? parseInt(priceMin.replace(/\D/g, '')) : undefined,
+          price_max: priceMax ? parseInt(priceMax.replace(/\D/g, '')) : undefined,
+          sort_by: sortBy,
+        })
+      }
       // Calculate actual pages based on fetched count (for client-side filtering)
       const fetchedCount = data.listings?.length ?? 0
       setTotalPages(Math.ceil(fetchedCount / ITEMS_PER_PAGE) || 1)

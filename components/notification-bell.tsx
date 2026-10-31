@@ -20,7 +20,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
   const [loading, setLoading] = useState(false)
   const [markingAll, setMarkingAll] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Fetch unread count
   const fetchUnreadCount = useCallback(async () => {

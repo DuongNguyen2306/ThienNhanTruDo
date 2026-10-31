@@ -15,6 +15,7 @@ import { BrutalFooter } from '@/components/brutal-footer'
 import { formatVnd } from '@/lib/data'
 import { listingApi, tenantApi } from '@/lib/api'
 import { useAuth } from '@/components/auth-provider'
+import { trackEvent } from '@/lib/analytics'
 
 // Dynamic import RealMap (Leaflet requires client-side only)
 const RealMap = dynamic(() => import('@/components/RealMap').then((m) => m.RealMap), {
@@ -149,6 +150,14 @@ export default function ListingDetailPage() {
           brand: listingData.seller?.sellerProfile?.brand,
         })
         setStatus('success')
+        // GA4: ghi nhận lượt xem tin đăng (không gửi PII của chủ trọ)
+        trackEvent('view_listing', {
+          listing_id: String(listingData.id),
+          room_type: listingData.roomType ?? 'unknown',
+          price: listingData.rent ?? undefined,
+          city: listingData.city ?? undefined,
+          district: listingData.district ?? undefined,
+        })
       })
       .catch((err: any) => {
         if (cancelled) return
@@ -280,6 +289,16 @@ export default function ListingDetailPage() {
       // Success
       setBookingSuccess(true)
       setBookingLoading(false)
+
+      // GA4: ghi nhận lịch hẹn — KHÔNG gửi số điện thoại / ghi chú (PII)
+      trackEvent('book_appointment', {
+        listing_id: String(listing.id),
+        room_type: listing.roomType ?? 'unknown',
+        price: listing.rent ?? undefined,
+        lead_time_hours: Math.round(
+          (new Date(`${bookingDate}T${bookingTime}:00`).getTime() - Date.now()) / 3600000,
+        ),
+      })
 
       // Reset form after delay
       setTimeout(() => {

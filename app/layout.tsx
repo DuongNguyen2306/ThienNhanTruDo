@@ -1,6 +1,8 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Be_Vietnam_Pro } from 'next/font/google'
+import { Ga4Provider } from '@/components/ga4-provider'
+import { allowGaOnLocalhost, resolveGaEnabled } from '@/lib/analytics'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
@@ -45,12 +47,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  // Cờ bật GA4 được quyết định ở SERVER (runtime), nên .env.local ở máy dev
+  // không thể vô hiệu hoá tracker trên production build.
+  const gaEnabled = resolveGaEnabled()
+  const gaAllowLocalhost = allowGaOnLocalhost()
+
   return (
     <html lang="vi" className={beVietnamPro.variable}>
       <body className={`${beVietnamPro.className} antialiased`}>
         <Providers>
           {children}
         </Providers>
+        <Ga4Provider enabled={gaEnabled} allowLocalhost={gaAllowLocalhost} />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
