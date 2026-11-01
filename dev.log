@@ -7,3 +7,120 @@ npm notice run next dev
 ✓ Ready in 735ms
 ✓ Running next.config.mjs took 26ms
 
+ GET /json/version 404 in 586ms (next.js: 568ms, application-code: 17ms)
+ GET / 200 in 650ms (next.js: 297ms, application-code: 352ms)
+ GET / 200 in 81ms (next.js: 11ms, application-code: 69ms)
+[browser] TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.search (lib/api.ts:341:12)
+    at ClientPage.useEffect (app/ClientPage.tsx:31:16)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData
+ GET /admin/analytics 200 in 278ms (next.js: 33ms, proxy.ts: 69ms, application-code: 177ms)
+[browser] TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.search (lib/api.ts:341:12)
+    at ClientPage.useEffect (app/ClientPage.tsx:31:16)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData
+[browser] [NotificationBell] Unread count error: TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.getUnreadCount (lib/api.ts:1322:5)
+    at NotificationBell.useCallback[fetchUnreadCount] (components/notification-bell.tsx:29:42)
+    at NotificationBell.useEffect (components/notification-bell.tsx:74:5)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData (components/notification-bell.tsx:37:15)
+[browser] [NotificationBell] Unread count error: TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.getUnreadCount (lib/api.ts:1322:5)
+    at NotificationBell.useCallback[fetchUnreadCount] (components/notification-bell.tsx:29:42)
+    at NotificationBell.useEffect (components/notification-bell.tsx:74:5)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData (components/notification-bell.tsx:37:15)
+[browser] [NotificationBell] Unread count error: TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.getUnreadCount (lib/api.ts:1322:5)
+    at NotificationBell.useCallback[fetchUnreadCount] (components/notification-bell.tsx:29:42)
+    at NotificationBell.useEffect (components/notification-bell.tsx:74:5)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData (components/notification-bell.tsx:37:15)
+[browser] [NotificationBell] Unread count error: TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.getUnreadCount (lib/api.ts:1322:5)
+    at NotificationBell.useCallback[fetchUnreadCount] (components/notification-bell.tsx:29:42)
+    at NotificationBell.useEffect (components/notification-bell.tsx:74:5)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData (components/notification-bell.tsx:37:15)
+[browser] [NotificationBell] Unread count error: TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.getUnreadCount (lib/api.ts:1322:5)
+    at NotificationBell.useCallback[fetchUnreadCount] (components/notification-bell.tsx:29:42)
+    at NotificationBell.useEffect (components/notification-bell.tsx:78:7)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData (components/notification-bell.tsx:37:15)
+ GET /admin/analytics 200 in 67ms (next.js: 7ms, proxy.ts: 8ms, application-code: 52ms)
+[browser] [NotificationBell] Unread count error: TypeError: Failed to fetch
+    at request (lib/api.ts:115:23)
+    at apiBase (lib/api.ts:151:26)
+    at Object.getUnreadCount (lib/api.ts:1322:5)
+    at NotificationBell.useCallback[fetchUnreadCount] (components/notification-bell.tsx:29:42)
+    at NotificationBell.useEffect (components/notification-bell.tsx:78:7)
+  113 |
+  114 |   try {
+> 115 |     const res = await fetch(`${API_BASE}${endpoint}`, {
+      |                       ^
+  116 |       method: options.method ?? 'GET',
+  117 |       headers,
+  118 |       body: isFormData (components/notification-bell.tsx:37:15)
+✓ Compiled in 184ms
+ GET / 200 in 74ms (next.js: 16ms, application-code: 58ms)
+ GET /admin/analytics 200 in 118ms (next.js: 22ms, proxy.ts: 58ms, application-code: 37ms)
+ GET / 200 in 44ms (next.js: 6ms, application-code: 38ms)
+✓ Compiled in 147ms
+ GET /admin/analytics 200 in 102ms (next.js: 18ms, proxy.ts: 28ms, application-code: 55ms)
+ GET / 200 in 32ms (next.js: 7ms, application-code: 26ms)
+✓ Compiled in 143ms
+ GET /admin/analytics 200 in 78ms (next.js: 16ms, proxy.ts: 31ms, application-code: 31ms)
+ GET /admin/analytics 200 in 56ms (next.js: 16ms, proxy.ts: 4ms, application-code: 36ms)

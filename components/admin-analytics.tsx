@@ -466,7 +466,7 @@ export default function AdminAnalyticsPage() {
             <MetricCard
               label="Tổng phiên truy cập"
               value={formatNumber(report?.totals?.totalSessions ?? 0)}
-              hint={`Lịch sử ${report?.periodLabel?.toLowerCase() ?? ''} — có độ trễ 24–48 giờ`}
+              hint={`Lịch sử ${report?.periodLabel?.toLowerCase() ?? ''} — dữ liệu GA4 đã xử lý`}
               icon={<Activity className="size-5 text-[#151515]" />}
             />
             {(['facebook', 'threads', 'google', 'direct'] as const).map((key) => {
@@ -530,8 +530,8 @@ export default function AdminAnalyticsPage() {
                   Chưa có dữ liệu truy cập
                 </p>
                 <p className="max-w-md text-sm font-medium leading-relaxed text-[#151515]/55">
-                  Google Analytics 4 cần 24–48 giờ để xử lý dữ liệu lịch sử.
-                  Số liệu sẽ tự xuất hiện sau khi property có lượt truy cập được ghi nhận.
+                  Google Analytics 4 chưa ghi nhận lượt truy cập nào trong khoảng thời gian
+                  này. Số liệu sẽ tự xuất hiện ngay khi có lượt truy cập mới.
                 </p>
               </div>
             ) : (
@@ -686,8 +686,9 @@ export default function AdminAnalyticsPage() {
                   lịch sử.
                 </li>
                 <li>
-                  • <strong className="font-black text-[#151515]">Lịch sử</strong> có độ trễ 24–48
-                  giờ — dữ liệu hôm nay thường chưa có.
+                  • <strong className="font-black text-[#151515]">Lịch sử</strong> tính theo
+                  ngày theo múi giờ của property (Asia/Saigon). Dữ liệu có thể chưa kịp được
+                  GA4 xử lý cho các lượt truy cập vừa xảy ra.
                 </li>
                 {report?.note ? <li>• {report.note}</li> : null}
               </ul>

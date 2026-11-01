@@ -75,14 +75,45 @@ function resolveCredentialsPath() {
 let cachedClient = null;
 let cachedClientError = null;
 
+/**
+ * Credentials từ biến môi trường (dùng cho Vercel / container, nơi không
+ * thể upload file JSON).
+ *
+ * `GA4_PRIVATE_KEY` phải lưu với newline thật (`\n`), không phải chuỗi
+ * literal `\n`. Nhiều CLI đặt biến từ file sẽ tự thay thế.
+ */
+function resolveCredentialsFromEnv() {
+  const clientEmail = (process.env.GA4_CLIENT_EMAIL || '').trim();
+  const rawKey = process.env.GA4_PRIVATE_KEY || '';
+
+  if (!clientEmail || !rawKey) return null;
+
+  // Người dùng có thể paste private key với newline bị escape.
+  const privateKey = rawKey.replace(/\\n/g, '\n');
+
+  return { client_email: clientEmail, private_key: privateKey };
+}
+
 function getClient() {
   if (cachedClient) return cachedClient;
   if (cachedClientError) throw cachedClientError;
 
+  // Ưu tiên biến môi trường — hoạt động trên Vercel.
+  const envCredentials = resolveCredentialsFromEnv();
+  if (envCredentials) {
+    try {
+      cachedClient = new BetaAnalyticsDataClient({ credentials: envCredentials });
+      return cachedClient;
+    } catch (error) {
+      cachedClientError = error;
+      throw error;
+    }
+  }
+
   const credPath = resolveCredentialsPath();
   if (!credPath) {
     cachedClientError = new Error(
-      'GA4: không tìm thấy file credentials. Kiểm tra GOOGLE_APPLICATION_CREDENTIALS trong backend/.env hoặc đặt backend/secrets/ga4-service-account.json.',
+      'GA4: không tìm thấy thông tin xác thực. Kiểm tra GOOGLE_APPLICATION_CREDENTIALS trong backend/.env, đặt backend/secrets/ga4-service-account.json, hoặc set GA4_CLIENT_EMAIL + GA4_PRIVATE_KEY trong môi trường deploy.',
     );
     throw cachedClientError;
   }
@@ -100,7 +131,7 @@ function getClient() {
 }
 
 function isConfigured() {
-  return Boolean(PROPERTY_ID) && Boolean(resolveCredentialsPath());
+  return Boolean(PROPERTY_ID) && Boolean(resolveCredentialsFromEnv() || resolveCredentialsPath());
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -109,8 +140,12 @@ function isConfigured() {
 
 const PERIODS = {
   today: { startDate: 'today', endDate: 'today', label: 'Hôm nay' },
-  '7d': { startDate: '7daysAgo', endDate: 'yesterday', label: '7 ngày' },
-  '30d': { startDate: '30daysAgo', endDate: 'yesterday', label: '30 ngày' },
+  // `endDate` phải là 'today' chứ không phải 'yesterday': GA4 có thể đã có
+  // dữ liệu của hôm nay (độ trễ xử lý thực tế thường vài giờ, không phải
+  // 24–48h như nhiều tài liệu mô tả). Dùng 'yesterday' sẽ loại mất toàn
+  // bộ dữ liệu khi property mới bắt đầu nhận lượt truy cập.
+  '7d': { startDate: '7daysAgo', endDate: 'today', label: '7 ngày' },
+  '30d': { startDate: '30daysAgo', endDate: 'today', label: '30 ngày' },
 };
 
 function resolvePeriod(period) {
@@ -309,8 +344,7 @@ async function getTrafficReport(period) {
       sources,
       note:
         'totalUsers là số người dùng DUY NHẤT từ truy vấn tổng của GA4. ' +
-        'Tổng activeUsers của các nguồn có thể lớn hơn vì một người có thể đến từ nhiều nguồn.',
-      generatedAt: new Date().toISOString(),
+        'Tổng activeUsers của các nguồn có thể lớn hơn vì một người có thể đến từ nhiều nguồn.',      generatedAt: new Date().toISOString(),
     };
 
     return setCached(cacheKey, payload, CACHE_TTL_MS);
@@ -385,6 +419,7 @@ module.exports = {
   OTHER_LABEL,
   isConfigured,
   resolveCredentialsPath,
+  resolveCredentialsFromEnv,
   resolvePeriod,
   classifySource,
   getTrafficReport,
