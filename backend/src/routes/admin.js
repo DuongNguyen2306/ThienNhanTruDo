@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const revenueHelper = require('../helpers/revenueHelper');
 const reviewHelper = require('../helpers/websiteReviewHelper');
 const internalStore = require('../helpers/internalStore');
+const ga4Service = require('../services/ga4Service');
 
 const router = express.Router();
 
@@ -1286,6 +1287,64 @@ router.get('/reviews/stats', async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// ============================================
+// GET /api/admin/analytics/traffic
+// Website traffic by acquisition source, read live from the GA4 Data API.
+// Chỉ Admin được truy cập (đã áp dụng ở đầu router).
+// ============================================
+router.get('/analytics/traffic', async (req, res, next) => {
+  try {
+    const { period = '7d' } = req.query;
+
+    if (!ga4Service.isConfigured()) {
+      return res.status(503).json({
+        error:
+          'Tính năng thống kê truy cập chưa được cấu hình (thiếu GA4_PROPERTY_ID hoặc thông tin xác thực Google).',
+        code: 'GA4_NOT_CONFIGURED',
+      });
+    }
+
+    const report = await ga4Service.getTrafficReport(period);
+
+    res.json(report);
+  } catch (error) {
+    // Lỗi GA4 đã được chuẩn hoá thành thông điệp thân thiện, không kèm
+    // bất kỳ thông tin credential nào.
+    console.error('[admin/analytics/traffic]', error.message);
+    res.status(502).json({
+      error: error.message || 'Không đọc được dữ liệu từ Google Analytics.',
+      code: 'GA4_ERROR',
+    });
+  }
+});
+
+// ============================================
+// GET /api/admin/analytics/realtime
+// Active users in the last 30 minutes (Realtime API).
+// Số liệu realtime KHÁC số liệu lịch sử — xem `note` trong response.
+// ============================================
+router.get('/analytics/realtime', async (req, res, next) => {
+  try {
+    if (!ga4Service.isConfigured()) {
+      return res.status(503).json({
+        error:
+          'Tính năng thống kê truy cập chưa được cấu hình (thiếu GA4_PROPERTY_ID hoặc thông tin xác thực Google).',
+        code: 'GA4_NOT_CONFIGURED',
+      });
+    }
+
+    const report = await ga4Service.getRealtimeReport();
+
+    res.json(report);
+  } catch (error) {
+    console.error('[admin/analytics/realtime]', error.message);
+    res.status(502).json({
+      error: error.message || 'Không đọc được dữ liệu realtime từ Google Analytics.',
+      code: 'GA4_ERROR',
+    });
   }
 });
 

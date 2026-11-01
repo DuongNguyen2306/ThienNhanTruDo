@@ -174,3 +174,4 @@ serverless.yml
 # ================================================
 # docs/_build/
 # doc/_build/
+secrets/

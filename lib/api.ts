@@ -1082,6 +1082,25 @@ export const adminApi = {
       room: { totalReviews: number; hiddenCount: number }
     }>('/api/admin/reviews/stats'),
 
+  // ── Website traffic statistics (Google Analytics 4 Data API) ──────────
+  // Dữ liệu lịch sử theo nguồn truy cập. `period`: 'today' | '7d' | '30d'.
+  getAnalyticsTraffic: async (period: AnalyticsPeriod = '7d') => {
+    const raw = await api<
+      AnalyticsTrafficReport & { success?: boolean; data?: AnalyticsTrafficReport }
+    >(`/api/admin/analytics/traffic?period=${encodeURIComponent(period)}`)
+    // Backend có thể trả dạng phẳng hoặc bọc trong `data` — chuẩn hoá ở đây
+    // để component không phụ thuộc vào shape.
+    return unwrapAnalytics<AnalyticsTrafficReport>(raw)
+  },
+
+  // Người dùng đang hoạt động trong 30 phút gần nhất (Realtime API).
+  getAnalyticsRealtime: async () => {
+    const raw = await api<
+      AnalyticsRealtimeReport & { success?: boolean; data?: AnalyticsRealtimeReport }
+    >('/api/admin/analytics/realtime')
+    return unwrapAnalytics<AnalyticsRealtimeReport>(raw)
+  },
+
   // Moderation actions on a website review (Task 5).
   moderateWebsiteReview: (
     id: string,
@@ -1699,6 +1718,63 @@ export type UserGrowthPoint = {
   total: number
   tenant: number
   seller: number
+}
+
+// ── Google Analytics 4 traffic types ─────────────────────────────────────
+// Backend có thể trả payload dạng phẳng hoặc bọc trong `data`.
+// Helper này gỡ bỏ vỏ bọc để component không phụ thuộc vào shape.
+function unwrapAnalytics<T>(
+  raw: (T & { success?: boolean; data?: T }) | null | undefined
+): T {
+  const payload = (raw?.data ?? raw) as T | undefined
+  if (!payload) throw new Error('Phản hồi rỗng từ máy chủ.')
+  return payload
+}
+
+// Khoảng thời gian của báo cáo lịch sử.
+export type AnalyticsPeriod = 'today' | '7d' | '30d'
+
+/** Một dòng chi tiết theo `sessionSourceMedium` của GA4. */
+export type AnalyticsSourceBreakdown = {
+  sourceMedium: string
+  sessions: number
+  activeUsers: number
+}
+
+/** Một nhóm nguồn đã được gom (Facebook / Threads / Google / Trực tiếp-Khác). */
+export type AnalyticsSourceGroup = {
+  key: 'facebook' | 'threads' | 'google' | 'direct'
+  label: string
+  sessions: number
+  activeUsers: number
+  breakdown: AnalyticsSourceBreakdown[]
+}
+
+export type AnalyticsTrafficReport = {
+  period: AnalyticsPeriod
+  periodLabel: string
+  dateRange: { startDate: string; endDate: string }
+  totals: {
+    /** Người dùng DUY NHẤT — lấy từ truy vấn tổng, KHÔNG cộng từ các nguồn. */
+    totalUsers: number
+    totalSessions: number
+    totalActiveUsers: number
+    /** Tổng activeUsers của các nguồn (có thể > totalUsers do trùng người). */
+    usersBySourceSum: number
+  }
+  sources: AnalyticsSourceGroup[]
+  note: string
+  generatedAt: string
+}
+
+/** Người dùng đang hoạt động trong 30 phút gần nhất (Realtime API). */
+export type AnalyticsRealtimeReport = {
+  window: string
+  activeUsers: number
+  eventCount: number
+  countries: { country: string; activeUsers: number; eventCount: number }[]
+  note: string
+  generatedAt: string
 }
 
 // A review row in the admin review history (Task 5).

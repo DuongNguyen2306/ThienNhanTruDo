@@ -42,6 +42,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           { href: '/admin/finance', label: 'Báo cáo tài chính' },
           { href: '/admin/finance/transactions', label: 'Giao dịch' },
           { href: '/admin/reviews', label: 'Lịch sử đánh giá' },
+          { href: '/admin/analytics', label: 'Thống kê truy cập', badge: 'new' },
           { href: '/admin/audit', label: 'Nhật ký hệ thống' },
           { href: '/admin/config', label: 'Cấu hình hệ thống' },
           { href: '/admin/notifications', label: 'Thông báo' },

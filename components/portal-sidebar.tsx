@@ -206,6 +206,10 @@ function isActive(pathname: string, href: string) {
     return pathname === '/admin/reviews'
   }
 
+  if (href === '/admin/analytics') {
+    return pathname === '/admin/analytics'
+  }
+
   if (href === '/admin/config') {
     return pathname === '/admin/config'
   }
