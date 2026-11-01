@@ -16,3 +16,9 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+.vercel
+
+# Local dev artifacts — never commit
+server.log
+.env.local.bak
+*.bak
