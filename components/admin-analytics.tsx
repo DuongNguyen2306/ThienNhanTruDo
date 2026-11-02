@@ -203,25 +203,26 @@ function SourceBarChart({
         const percent = percents[source.key] ?? 0
         return (
           <div key={source.key} className="flex items-center gap-3">
-            <span className="w-32 shrink-0 truncate text-xs font-bold text-[#151515]/70 sm:w-40">
+            <span className="w-28 shrink-0 truncate text-xs font-bold text-[#151515]/70 sm:w-36">
               {source.label}
             </span>
+            {/* Thanh chỉ làm biểu thị trực quan — số liệu nằm ở cột riêng
+                bên phải để không bao giờ bị cắt khi giá trị nhỏ. */}
             <div className="h-6 flex-1 overflow-hidden rounded-lg border-2 border-[#151515] bg-[#F5F5F0]">
               <div
-                className={`flex h-full items-center justify-end ${style.bar} ${style.text}`}
+                className={`h-full ${style.bar}`}
                 style={{
                   width: `${Math.max(
                     (source.visits / max) * 100,
-                    source.visits > 0 ? 4 : 0
+                    source.visits > 0 ? 3 : 0
                   )}%`,
                 }}
-              >
-                <span className="pr-2 font-mono text-[11px] font-black">
-                  {formatNumber(source.visits)}
-                </span>
-              </div>
+              />
             </div>
-            <span className="w-12 shrink-0 text-right font-mono text-[11px] font-bold text-[#151515]/55">
+            <span className="w-14 shrink-0 text-right font-mono text-xs font-black text-[#151515]">
+              {formatNumber(source.visits)}
+            </span>
+            <span className="w-11 shrink-0 text-right font-mono text-[11px] font-bold text-[#151515]/55">
               {percent}%
             </span>
           </div>
@@ -357,8 +358,6 @@ function RealtimePanel({
 
 export default function AdminAnalyticsPage() {
   const [period, setPeriod] = useState<AnalyticsPeriod>('7d')
-  // Mặc định KHÔNG tính lượt truy cập từ localhost (dev & test).
-  const [includeLocal, setIncludeLocal] = useState(false)
   const [report, setReport] = useState<AnalyticsTrafficReport | null>(null)
   const [realtime, setRealtime] = useState<AnalyticsRealtimeReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -367,11 +366,12 @@ export default function AdminAnalyticsPage() {
   const [rtError, setRtError] = useState<string | null>(null)
 
   const loadTraffic = useCallback(
-    async (p: AnalyticsPeriod, withLocal: boolean) => {
+    async (p: AnalyticsPeriod) => {
       setLoading(true)
       setError(null)
       try {
-        const data = await adminApi.getAnalyticsTraffic(p, withLocal)
+        // KHÔNG tính lượt truy cập từ localhost (dev & test) — chỉ khách thật.
+        const data = await adminApi.getAnalyticsTraffic(p, false)
         setReport(data)
       } catch (e) {
         setReport(null)
@@ -406,8 +406,8 @@ export default function AdminAnalyticsPage() {
   }, [])
 
   useEffect(() => {
-    loadTraffic(period, includeLocal)
-  }, [period, includeLocal, loadTraffic])
+    loadTraffic(period)
+  }, [period, loadTraffic])
 
   useEffect(() => {
     loadRealtime()
@@ -482,22 +482,6 @@ export default function AdminAnalyticsPage() {
             })}
           </div>
 
-          {/* Toggle lượt truy cập từ môi trường dev/test */}
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-[#151515]/70">
-            <input
-              type="checkbox"
-              checked={includeLocal}
-              onChange={(e) => setIncludeLocal(e.target.checked)}
-              className="size-4 accent-[#151515]"
-            />
-            Bao gồm lượt truy cập từ localhost (dev/test)
-            {excludedLocalVisits > 0 ? (
-              <span className="rounded-md border-2 border-[#151515] bg-[#FDE047] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#151515]">
-                {excludedLocalVisits} lượt đang bị ẩn
-              </span>
-            ) : null}
-          </label>
-
           {/* Bản ghi chưa xác định được website — báo riêng, không tính vào
               khách thật. */}
           {unknownOriginVisits > 0 ? (
@@ -526,7 +510,7 @@ export default function AdminAnalyticsPage() {
             <p className="text-sm font-bold text-red-700">{error}</p>
             <button
               type="button"
-              onClick={() => loadTraffic(period, includeLocal)}
+              onClick={() => loadTraffic(period)}
               className="inline-flex items-center gap-2 rounded-xl border-2 border-[#151515] bg-white px-4 py-2 text-sm font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0_#151515]"
             >
               <RefreshCw className="size-4" />
@@ -717,7 +701,7 @@ export default function AdminAnalyticsPage() {
                   Lượt truy cập theo website
                 </h2>
                 <span className="font-mono text-xs font-bold text-[#151515]/70">
-                  {includeLocal ? 'Bao gồm dev/test' : 'Chỉ khách thật'}
+                  Chỉ khách thật
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -781,8 +765,9 @@ export default function AdminAnalyticsPage() {
                 </li>
                 <li>
                   • <strong className="font-black text-[#151515]">Nguồn</strong> được xác định
-                  theo UTM hợp lệ, sau đó tới referrer; không xác định được thì tính vào
-                  Trực tiếp / Khác (kể cả ChatGPT và các nguồn khác).
+                  theo click id (fbclid/gclid), sau đó tới UTM hợp lệ, rồi tới
+                  referrer; không xác định được thì tính vào Trực tiếp / Khác (kể cả
+                  ChatGPT và các nguồn khác).
                 </li>
                 {report?.firstRecordedAt ? (
                   <li>
@@ -790,12 +775,6 @@ export default function AdminAnalyticsPage() {
                     {formatTime(report.firstRecordedAt)}
                   </li>
                 ) : null}
-                <li>
-                  • <strong className="font-black text-[#151515]">Lượt dev/test</strong>:{' '}
-                  {excludedLocalVisits > 0
-                    ? `${excludedLocalVisits} lượt truy cập từ localhost đang được ẩn khỏi số liệu (không phải khách thật).`
-                    : 'Không có lượt truy cập nào từ localhost trong kỳ này.'}
-                </li>
                 {unknownOriginVisits > 0 ? (
                   <li>
                     • <strong className="font-black text-[#151515]">Chưa xác định</strong>:{' '}
