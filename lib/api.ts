@@ -1878,6 +1878,20 @@ export type Ga4TrafficReport = {
   daily: { date: string; sessions: number }[]
   /** Chi tiết từng source/medium của GA4. */
   breakdown: Ga4BreakdownRow[]
+  /**
+   * Số lượt theo nguồn đọc từ CUSTOM EVENT `traffic_source` của GA4.
+   *
+   * Khớp với bảng drill-down trong GA4 UI (Reports → Events → traffic_source
+   * → parameter traffic_source), nơi Facebook = 1.
+   *
+   * `available: false` ⇒ custom dimension chưa được đăng ký trong GA4 Admin
+   * ⇒ chưa đọc được; hệ thống vẫn chạy bình thường bằng `sessionSourceMedium`.
+   */
+  customEvent?: {
+    available: boolean
+    bySource: Record<string, number>
+    total: number
+  }
   note: string
   generatedAt: string
 }
