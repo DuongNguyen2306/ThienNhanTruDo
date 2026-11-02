@@ -40,6 +40,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           { href: '/admin/listings', label: 'Quản lý tin đăng' },
           { href: '/admin/account-proposals', label: 'Đề xuất xử lý', hint: 3 },
           { href: '/admin/finance', label: 'Báo cáo tài chính' },
+          { href: '/admin/financial-overview', label: 'Financial Overview', badge: 'new' },
           { href: '/admin/finance/transactions', label: 'Giao dịch' },
           { href: '/admin/reviews', label: 'Lịch sử đánh giá' },
           { href: '/admin/analytics', label: 'Thống kê truy cập', badge: 'new' },
