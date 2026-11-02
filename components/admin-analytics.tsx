@@ -3,30 +3,20 @@
 /**
  * Admin → Thống kê truy cập.
  *
- * HAI NGUỒN DỮ LIỆU (chuyển qua tab):
+ * NGUỒN DỮ LIỆU CHÍNH: tự ghi (tracker) — lượt truy cập do website ghi vào
+ * collection `traffic_visits`.
+ *   • Route: GET /api/admin/analytics/traffic?period=today|7d|30d|all
  *
- *  1. GA4 (mặc định) — số SESSIONS theo nguồn, lấy từ dimension
- *     `sessionSourceMedium` của GA4 Data API, đã đồng bộ vào MongoDB bằng
- *     upsert theo (ngày, nguồn) nên chạy lại không nhân đôi số liệu.
- *       • Facebook và Threads tách RIÊNG từ `sessionSourceMedium`
- *         (KHÔNG lấy từ nhóm tổng hợp Organic Social — nhóm đó gộp cả FB
- *         lẫn Threads lẫn Instagram nên không tách được từng nguồn).
- *       • Route: GET /api/admin/analytics/ga4?period=today|7d|30d|all
- *       • Đồng bộ: POST /api/admin/analytics/ga4/sync
- *
- *  2. Tự ghi (tracker) — lượt truy cập do website tự ghi vào collection
- *     `traffic_visits`.
- *       • Route: GET /api/admin/analytics/traffic?period=today|7d|30d|all
- *
- *  Realtime (GA4, 30 phút) → GET /api/admin/analytics/realtime
+ * Realtime (GA4, 30 phút) → GET /api/admin/analytics/realtime
  *
  * Backend đã áp dụng `authorize('admin')` — giao diện chỉ là lớp trình bày,
  * không phải ranh giới bảo mật.
  *
  * Lưu ý số liệu:
- *  • GA4: đơn vị là SESSIONS (phiên của GA4), có kỳ "Toàn bộ".
  *  • Tự ghi: đơn vị là LƯỢT (mỗi phiên 30 phút = 1 lượt), tổng các nhóm
  *    nguồn luôn bằng tổng lượt truy cập.
+ *  • Realtime: đơn vị là người dùng đang hoạt động trong 30 phút gần nhất,
+ *    chưa qua xử lý đầy đủ nên có thể khác số liệu lịch sử.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -46,8 +36,6 @@ import {
   type AnalyticsRealtimeReport,
   type AnalyticsSourceGroup,
   type AnalyticsTrafficReport,
-  type Ga4SourceGroup,
-  type Ga4TrafficReport,
 } from '@/lib/api'
 const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
   { value: 'today', label: 'Hôm nay' },
@@ -135,153 +123,6 @@ function formatTime(iso: string) {
 // Sub-components
 // ───────────────────────────────────────────────────────────────────────────
 
-/**
- * Panel số liệu GA4.
- *
- * HIỂN THỊ HAI NGUỒN:
- *  1. `sessionSourceMedium` (sessions) — dimension chuẩn của GA4.
- *  2. `customEvent:traffic_source` (event count) — nơi GA4 ghi nhận nguồn
- *     đã chuẩn hoá (facebook / threads / google / …), KHỚP với bảng
- *     drill-down trong GA4 UI (Reports → Events → traffic_source).
- *
- * Nguồn (2) là nơi có số Facebook khớp với GA4 UI, vì `sessionSourceMedium`
- * gán nguồn ở mức phiên theo thứ tự ưu tiên của GA4 (referrer → UTM) và
- * rơi về `(direct)` khi mở link quảng cáo trong app browser.
- */
-function Ga4Panel({
-  data,
-  loading,
-  error,
-  onSync,
-  syncing,
-}: {
-  data: Ga4TrafficReport | null
-  loading: boolean
-  error: string | null
-  onSync: () => void
-  syncing: boolean
-}) {
-  const custom = data?.customEvent
-  const customAvailable = custom?.available === true
-
-  return (
-    <BrutalCard className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b-[3px] border-[#151515] bg-[#1877F2] px-5 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-white">
-          <BarChart3 className="size-4" />
-          Số liệu Google Analytics 4
-        </h2>
-        <div className="flex items-center gap-3">
-          {data?.totals?.lastSyncedAt ? (
-            <span className="font-mono text-xs font-bold text-white/70">
-              Đồng bộ {formatTime(data.totals.lastSyncedAt)}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={onSync}
-            disabled={loading || syncing}
-            className="inline-flex items-center gap-1.5 rounded-lg border-2 border-white/40 px-2.5 py-1 text-xs font-bold text-white/85 transition hover:border-[#FDE047] hover:text-[#FDE047] disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Đang đồng bộ' : 'Đồng bộ GA4'}
-          </button>
-        </div>
-      </div>
-
-      <div className="p-5">
-        {loading && !data ? (
-          <div className="flex h-20 items-center justify-center">
-            <Loader2 className="size-6 animate-spin text-[#151515]/40" />
-          </div>
-        ) : error ? (
-          <div className="flex items-center gap-2.5 rounded-xl border-2 border-red-400/60 bg-red-500/10 px-4 py-3">
-            <AlertTriangle className="size-4 shrink-0 text-red-400" />
-            <p className="text-xs font-semibold text-red-200">{error}</p>
-          </div>
-        ) : data ? (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Nguồn chuẩn của GA4 */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#151515]/55">
-                  Theo session source / medium
-                </p>
-                <table className="mt-2 w-full text-left">
-                  <tbody>
-                    {data.sources.map((s) => (
-                      <tr key={s.key} className="border-b border-[#151515]/10 last:border-0">
-                        <td className="py-1.5 text-sm font-bold text-[#151515]">
-                          {s.label}
-                        </td>
-                        <td className="py-1.5 text-right font-mono text-sm font-black text-[#151515]">
-                          {formatNumber(s.sessions)}
-                        </td>
-                        <td className="w-12 py-1.5 text-right font-mono text-xs font-bold text-[#151515]/55">
-                          {s.percent}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Custom event — khớp bảng drill-down trong GA4 UI */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#151515]/55">
-                  Theo event traffic_source (khớp GA4 UI)
-                </p>
-                {customAvailable ? (
-                  <table className="mt-2 w-full text-left">
-                    <tbody>
-                      {(['facebook', 'threads', 'google', 'direct'] as const).map((key) => (
-                        <tr key={key} className="border-b border-[#151515]/10 last:border-0">
-                          <td className="py-1.5 text-sm font-bold text-[#151515]">
-                            {key === 'facebook'
-                              ? 'Facebook'
-                              : key === 'threads'
-                                ? 'Threads'
-                                : key === 'google'
-                                  ? 'Google'
-                                  : 'Trực tiếp / Khác'}
-                          </td>
-                          <td className="py-1.5 text-right font-mono text-sm font-black text-[#151515]">
-                            {formatNumber(custom?.bySource?.[key] ?? 0)}
-                          </td>
-                          <td className="w-12 py-1.5 text-right font-mono text-xs font-bold text-[#151515]/55">
-                            {custom && custom.total > 0
-                              ? Math.round(
-                                  ((custom.bySource?.[key] ?? 0) / custom.total) * 100
-                                )
-                              : 0}
-                            %
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="mt-2 rounded-xl border-2 border-[#151515]/20 bg-[#F5F5F0] px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#151515]/65">
-                    Chưa đọc được custom dimension <code>traffic_source</code>. Cần
-                    đăng ký trong GA4: <strong>Admin → Data display → Custom definitions</strong>{' '}
-                    (Parameter name <code>traffic_source</code>, Scope <code>Event</code>).
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {data.note ? (
-              <p className="mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed text-[#151515]/50">
-                <Activity className="mt-0.5 size-3.5 shrink-0" />
-                {data.note}
-              </p>
-            ) : null}
-          </>
-        ) : null}
-      </div>
-    </BrutalCard>
-  )
-}
 
 function BrutalCard({
   children,
@@ -520,14 +361,10 @@ export default function AdminAnalyticsPage() {
   const [includeLocal, setIncludeLocal] = useState(false)
   const [report, setReport] = useState<AnalyticsTrafficReport | null>(null)
   const [realtime, setRealtime] = useState<AnalyticsRealtimeReport | null>(null)
-  const [ga4, setGa4] = useState<Ga4TrafficReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [rtLoading, setRtLoading] = useState(false)
-  const [ga4Loading, setGa4Loading] = useState(false)
-  const [ga4Syncing, setGa4Syncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rtError, setRtError] = useState<string | null>(null)
-  const [ga4Error, setGa4Error] = useState<string | null>(null)
 
   const loadTraffic = useCallback(
     async (p: AnalyticsPeriod, withLocal: boolean) => {
@@ -568,45 +405,9 @@ export default function AdminAnalyticsPage() {
     }
   }, [])
 
-  // ── GA4 (đã đồng bộ vào MongoDB) ──────────────────────────────────────
-  const loadGa4 = useCallback(async () => {
-    setGa4Loading(true)
-    setGa4Error(null)
-    try {
-      const data = await adminApi.getAnalyticsGa4(period)
-      setGa4(data)
-    } catch (e) {
-      setGa4(null)
-      setGa4Error(
-        e instanceof Error ? e.message : 'Không đọc được số liệu GA4.'
-      )
-    } finally {
-      setGa4Loading(false)
-    }
-  }, [period])
-
-  const syncGa4 = useCallback(async () => {
-    setGa4Syncing(true)
-    setGa4Error(null)
-    try {
-      await adminApi.syncAnalyticsGa4(90)
-      await loadGa4()
-    } catch (e) {
-      setGa4Error(
-        e instanceof Error ? e.message : 'Không đồng bộ được số liệu GA4.'
-      )
-    } finally {
-      setGa4Syncing(false)
-    }
-  }, [loadGa4])
-
   useEffect(() => {
     loadTraffic(period, includeLocal)
   }, [period, includeLocal, loadTraffic])
-
-  useEffect(() => {
-    loadGa4()
-  }, [loadGa4])
 
   useEffect(() => {
     loadRealtime()
@@ -715,15 +516,6 @@ export default function AdminAnalyticsPage() {
         loading={rtLoading}
         error={rtError}
         onRefresh={loadRealtime}
-      />
-
-      {/* Số liệu GA4 đã đồng bộ (sessions + custom event traffic_source) */}
-      <Ga4Panel
-        data={ga4}
-        loading={ga4Loading}
-        error={ga4Error}
-        onSync={syncGa4}
-        syncing={ga4Syncing}
       />
 
       {/* Error state — lịch sử */}
