@@ -422,6 +422,7 @@ module.exports = {
   resolveCredentialsFromEnv,
   resolvePeriod,
   classifySource,
+  getClient,
   getTrafficReport,
   getRealtimeReport,
   clearCache,

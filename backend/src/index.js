@@ -37,13 +37,22 @@ const app = express();
 
 // Middleware
 // CORS - FE chạy trên Vercel (HTTPS), BE chạy local
+//
+// LƯU Ý QUAN TRỌNG (Private Network Access):
+//  Trang trên Vercel là HTTPS, còn backend local là HTTP. Chrome coi
+//  `http://localhost` là "potentially trustworthy" nên không chặn mixed
+//  content, NHƯNG browser vẫn gửi preflight kèm header
+//  `Access-Control-Request-Private-Network: true` cho mọi request từ
+//  HTTPS sang loopback. Nếu server KHÔNG trả lại
+//  `Access-Control-Allow-Private-Network: true` thì browser chặn request ⇒
+//  frontend trên Vercel không gọi được được backend local.
 const allowedOrigins = [
   // Local development frontend
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
-  // Production frontend (Vercel)
+  // Production frontend (Vercel) — domain chính
   'https://thien-nhan-tru-do-kappa.vercel.app',
 ];
 
@@ -52,6 +61,46 @@ if (process.env.FRONTEND_URL) {
   const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim()).filter(Boolean);
   allowedOrigins.push(...extraUrls);
 }
+
+/**
+ * Origin này có thuộc website Vercel của dự án không?
+ *
+ * Domain chính đã nằm trong `allowedOrigins`, nhưng mỗi lần deploy Vercel
+ * sinh ra một URL riêng (`thien-nhan-tru-<hash>-a0994123456-3674s-projects
+ * .vercel.app`) và các URL preview khác. Nếu không cho phép, trình duyệt bị
+ * chặn CORS khi mở bằng URL đó.
+ */
+function isAllowedVercelOrigin(origin) {
+  if (typeof origin !== 'string') return false;
+  if (!origin.startsWith('https://')) return false;
+  let hostname;
+  try {
+    hostname = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  // Domain chính của dự án + mọi URL deploy/preview của cùng project.
+  return (
+    hostname === 'thien-nhan-tru-do-kappa.vercel.app' ||
+    /^thien-nhan-tru-[a-z0-9]+-a0994123456-3674s-projects\.vercel\.app$/i.test(
+      hostname
+    ) ||
+    /^thien-nhan-tru-do-[a-z0-9-]+\.vercel\.app$/i.test(hostname)
+  );
+}
+
+/**
+ * Trả header cho phép Private Network Access.
+ *
+ * Phải đặt TRƯỚC middleware `cors()` để header có mặt trong preflight
+ * response (preflight được kết thúc ngay bởi `cors()`).
+ */
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network'] === 'true') {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
 
 /**
  * Backend có thể chạy sau một reverse proxy (VD: khi deploy lên một dịch vụ
@@ -65,13 +114,22 @@ app.set('trust proxy', 1);
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (curl, mobile apps, server-to-server)
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || isAllowedVercelOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`CORS: Origin ${origin} not allowed`));
     }
   },
   credentials: true,
+  // Cho phép header của preflight Private Network Access.
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Access-Control-Request-Private-Network',
+    'Access-Control-Request-Headers',
+    'Access-Control-Request-Method',
+  ],
+  exposedHeaders: ['Access-Control-Allow-Private-Network'],
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

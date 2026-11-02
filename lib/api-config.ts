@@ -11,23 +11,32 @@
  *      value a deployment should rely on.
  *   2. Local development fallback — `http://localhost:3005`, the port the
  *      Express backend listens on (`backend/.env` → `PORT=3005`).
- *   3. Production without a usable `NEXT_PUBLIC_API_URL` — deliberately NOT a
- *      hardcoded `localhost` and deliberately NOT a legacy host. A request
- *      would silently hit the wrong origin, so the API layer raises a
- *      clear error instead (see `lib/api.ts`).
+ *   3. Production without `NEXT_PUBLIC_API_URL` — the API layer raises a
+ *      clear, catchable error instead of silently calling the wrong host
+ *      (see `lib/api.ts`).
+ *
+ * VỀ VIỆC DÙNG `localhost:3005` TRONG PRODUCTION
+ *  Backend của dự án chạy LOCAL trên máy của người quản trị, và website
+ *  Vercel được mở bằng trình duyệt trên ĐÚNG máy đó. Khi đó trình duyệt
+ *  gọi `http://localhost:3005` chính là gọi vào backend local ⇒ hoạt động
+ *  bình thường. Vì vậy KHÔNG chặn URL loopback ở production.
+ *
+ *  Hệ quả (chấp nhận được và có kiểm soát): khách thật mở website từ máy
+ *  KHÔNG chạy backend sẽ thấy request thất bại. Lỗi đó được báo rõ ràng
+ *  qua `API_CONFIG_ERROR_MESSAGE` thay vì gọi nhầm đích.
  *
  * The trailing slash is stripped so callers can always join with `/`.
  */
 
+/** URL backend local — dùng khi phát triển trên máy VÀ khi production
+ *  cố tình trỏ về backend local của người quản trị. */
 const DEV_API_URL = 'http://localhost:3005';
 
 /**
  * Hostname này có trỏ về chính máy của người dùng không?
  *
- * Backend chạy local ở `localhost:3005` — nếu bản build production dùng URL
- * đó thì mọi request của khách sẽ đi tới máy của khách (và hầu như luôn
- * thất bại). Vì vậy ở production, URL dạng loopback bị coi là "chưa cấu
- * hình" ⇒ `lib/api.ts` báo lỗi rõ ràng thay vì gọi sai chỗ.
+ * Dùng để gợi ý trong thông báo lỗi (xem `API_CONFIG_ERROR_MESSAGE`).
+ * KHÔNG dùng để chặn — backend local là một cấu hình hợp lệ.
  */
 function isLoopbackUrl(url: string): boolean {
   try {
@@ -50,18 +59,14 @@ function resolveApiBase(): string {
   if (configured) {
     const normalized = configured.replace(/\/+$/, '');
 
-    // Production: URL loopback không dùng được ⇒ coi như chưa cấu hình.
-    // (Vẫn chạy được ở development vì đó là chính backend local.)
-    if (process.env.NODE_ENV === 'production' && isLoopbackUrl(normalized)) {
-      return '';
-    }
-
+    // KHÔNG chặn URL loopback ở production: backend local là một cấu hình
+    // hợp lệ (website Vercel được mở trên máy đang chạy backend local).
+    // URL nào cũng được dùng nguyên vẹn — không tự thay bằng URL khác.
     return normalized;
   }
 
   if (process.env.NODE_ENV === 'production') {
-    // No URL configured for this deployment. `lib/api.ts` turns this into a
-    // readable error rather than calling the wrong host.
+    // Không có URL nào cấu hình cho bản build này.
     return '';
   }
 
@@ -71,8 +76,37 @@ function resolveApiBase(): string {
 /** The backend base URL, without a trailing slash. */
 export const API_BASE = resolveApiBase();
 
-/** True when this build has no usable API URL configured. */
+/** True khi production mà KHÔNG có `NEXT_PUBLIC_API_URL` dùng được. */
 export const IS_API_BASE_MISSING = API_BASE.length === 0;
+
+/** True khi API có thể dùng được (dev local, hoặc production đã trỏ đúng). */
+export const IS_API_BASE_USABLE = API_BASE.length > 0;
+
+/**
+ * Thông báo lỗi khi API chưa cấu hình.
+ *
+ * Phân biệt hai nguyên nhân để người quản trị biết cần sửa gì:
+ *  • thiếu hẳn biến môi trường;
+ *  • có biến nhưng trỏ về localhost (file `.env` được commit có sẵn giá trị
+ *    này, và nó được nạp lúc build ⇒ production cũng nhận giá trị đó).
+ */
+export const API_CONFIG_ERROR_MESSAGE = (() => {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  if (configured && isLoopbackUrl(configured.replace(/\/+$/, ''))) {
+    return (
+      'NEXT_PUBLIC_API_URL đang trỏ về localhost. ' +
+      'Điều này chỉ hoạt động khi mở website trên đúng máy đang chạy backend ' +
+      '(http://localhost:3005). Nếu cần dùng từ máy khác, hãy đặt ' +
+      'NEXT_PUBLIC_API_URL = https://<backend-công-khai> trong Vercel rồi deploy lại.'
+    );
+  }
+
+  return (
+    'Chưa cấu hình NEXT_PUBLIC_API_URL cho môi trường này. ' +
+    'Vui lòng kiểm tra biến môi trường.'
+  );
+})();
 
 /** Join a path onto the API base URL. */
 export function apiUrl(path: string): string {

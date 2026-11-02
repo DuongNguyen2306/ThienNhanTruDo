@@ -3,20 +3,30 @@
 /**
  * Admin → Thống kê truy cập.
  *
- * NGUỒN DỮ LIỆU: collection `traffic_visits` trong MongoDB (do chính website
- * ghi nhận qua `POST /api/traffic/visit`), KHÔNG phải GA4 Data API.
+ * HAI NGUỒN DỮ LIỆU (chuyển qua tab):
  *
- *   • Lịch sử → GET /api/admin/analytics/traffic?period=today|7d|30d|all
- *   • Realtime (GA4, 30 phút) → GET /api/admin/analytics/realtime
+ *  1. GA4 (mặc định) — số SESSIONS theo nguồn, lấy từ dimension
+ *     `sessionSourceMedium` của GA4 Data API, đã đồng bộ vào MongoDB bằng
+ *     upsert theo (ngày, nguồn) nên chạy lại không nhân đôi số liệu.
+ *       • Facebook và Threads tách RIÊNG từ `sessionSourceMedium`
+ *         (KHÔNG lấy từ nhóm tổng hợp Organic Social — nhóm đó gộp cả FB
+ *         lẫn Threads lẫn Instagram nên không tách được từng nguồn).
+ *       • Route: GET /api/admin/analytics/ga4?period=today|7d|30d|all
+ *       • Đồng bộ: POST /api/admin/analytics/ga4/sync
+ *
+ *  2. Tự ghi (tracker) — lượt truy cập do website tự ghi vào collection
+ *     `traffic_visits`.
+ *       • Route: GET /api/admin/analytics/traffic?period=today|7d|30d|all
+ *
+ *  Realtime (GA4, 30 phút) → GET /api/admin/analytics/realtime
  *
  * Backend đã áp dụng `authorize('admin')` — giao diện chỉ là lớp trình bày,
  * không phải ranh giới bảo mật.
  *
  * Lưu ý số liệu:
- *  • MỗI PHIÊN 30 phút = 1 LƯỢT. Tổng các nhóm nguồn LUÔN bằng tổng lượt
- *    truy cập (cùng một truy vấn aggregate).
- *  • KHÔNG có "người dùng duy nhất" — hệ thống không xác định được danh tính
- *    người dùng nên không gắn nhãn người dùng cho dữ liệu phiên.
+ *  • GA4: đơn vị là SESSIONS (phiên của GA4), có kỳ "Toàn bộ".
+ *  • Tự ghi: đơn vị là LƯỢT (mỗi phiên 30 phút = 1 lượt), tổng các nhóm
+ *    nguồn luôn bằng tổng lượt truy cập.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -36,6 +46,8 @@ import {
   type AnalyticsRealtimeReport,
   type AnalyticsSourceGroup,
   type AnalyticsTrafficReport,
+  type Ga4SourceGroup,
+  type Ga4TrafficReport,
 } from '@/lib/api'
 
 const PERIODS: { value: AnalyticsPeriod; label: string }[] = [

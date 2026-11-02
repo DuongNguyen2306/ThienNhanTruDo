@@ -23,7 +23,7 @@
  */
 
 import { useEffect } from 'react'
-import { API_BASE, IS_API_BASE_MISSING } from '@/lib/api-config'
+import { API_BASE, IS_API_BASE_USABLE } from '@/lib/api-config'
 
 /** Thời hạn phiên: 30 phút không hoạt động ⇒ phiên mới. */
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000
@@ -178,7 +178,10 @@ function readSiteHost(): string {
 // ───────────────────────────────────────────────────────────────────────────
 
 async function sendVisit(payload: TrafficPayload, attempt = 0): Promise<void> {
-  if (IS_API_BASE_MISSING || !API_BASE) return
+  // API chưa cấu hình (thiếu NEXT_PUBLIC_API_URL, hoặc URL trỏ về localhost
+  // trong bản build production) ⇒ KHÔNG gửi và KHÔNG retry. Tracker im lặng
+  // để không làm nhiễu console của người quản trị.
+  if (!IS_API_BASE_USABLE || !API_BASE) return
 
   try {
     const controller = new AbortController()
@@ -211,7 +214,8 @@ async function sendVisit(payload: TrafficPayload, attempt = 0): Promise<void> {
  */
 export function trackVisitOnce(): void {
   if (typeof window === 'undefined') return
-  if (IS_API_BASE_MISSING || !API_BASE) return
+  // Xem `sendVisit` — không gửi khi API chưa cấu hình.
+  if (!IS_API_BASE_USABLE || !API_BASE) return
 
   const session = getSession()
   if (session.sent) return

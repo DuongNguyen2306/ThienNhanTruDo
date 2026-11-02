@@ -3,14 +3,25 @@
 // The base URL lives in `lib/api-config.ts` — the single source of truth for
 // every API consumer in the app.
 
-import { API_BASE, IS_API_BASE_MISSING } from '@/lib/api-config'
+import {
+  API_BASE,
+  API_CONFIG_ERROR_MESSAGE,
+  IS_API_BASE_USABLE,
+} from '@/lib/api-config'
 
-export { API_BASE }
+export { API_BASE, IS_API_BASE_USABLE }
 
-// Helper to get full URL for backend-served files (uploads, etc.)
+/**
+ * Helper to get full URL for backend-served files (uploads, etc.).
+ *
+ * KHÔNG ném lỗi khi API chưa cấu hình: hàm này được dùng để render `<img>`,
+ * ném lỗi ở tầng render sẽ làm hỏng cả trang. Thay vào đó trả về chuỗi rỗng
+ * để ảnh không hiển thị (alt text vẫn hiện).
+ */
 export function getBackendUrl(path: string): string {
   if (!path) return ''
   if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (!API_BASE) return ''
   return `${API_BASE}${path}`
 }
 
@@ -33,10 +44,37 @@ class ApiError extends Error {
 
   constructor(message: string, status: number, data?: unknown) {
     super(message)
+    this.name = 'ApiError'
     this.status = status
     this.data = data
     this.response = { status, data }
   }
+}
+
+/**
+ * Lỗi cấu hình API.
+ *
+ * Là một `ApiError` (một `Error` thật) nên mọi `catch` hiện có trong app vẫn
+ * bắt được như bình thường — chỉ khác là `status` là 500 và `message` mô tả
+ * đúng nguyên nhân.
+ */
+export class ApiConfigError extends ApiError {
+  constructor(message: string) {
+    super(message, 500)
+    this.name = 'ApiConfigError'
+  }
+}
+
+/**
+ * Kiểm tra cấu hình API trước khi gọi.
+ *
+ * Ném `ApiConfigError` với thông báo rõ ràng khi production chưa có URL API
+ * dùng được — TUYỆT ĐỐI không ném lỗi ở tầng module (import time) vì điều đó
+ * sẽ làm hỏng toàn bộ trang.
+ */
+function assertApiConfigured(): void {
+  if (IS_API_BASE_USABLE) return
+  throw new ApiConfigError(API_CONFIG_ERROR_MESSAGE)
 }
 
 /**
@@ -79,14 +117,11 @@ async function request<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
-  // A deployment without NEXT_PUBLIC_API_URL must fail loudly instead of
-  // silently calling the wrong origin.
-  if (IS_API_BASE_MISSING) {
-    throw new ApiError(
-      'Chưa cấu hình NEXT_PUBLIC_API_URL cho môi trường này. Vui lòng kiểm tra biến môi trường.',
-      500
-    )
-  }
+  // A deployment without a usable NEXT_PUBLIC_API_URL must fail loudly with a
+  // clear message instead of silently calling the wrong origin. This throws a
+  // normal `ApiError`, so every existing `catch` block in the app still
+  // handles it — the page renders an error state instead of crashing.
+  assertApiConfigured()
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
 
@@ -418,7 +453,10 @@ export const sellerApi = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
     const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
-    
+
+    // Kiểm tra cấu hình API trước khi gọi (ném `ApiConfigError` rõ ràng).
+    assertApiConfigured()
+
     return fetch(`${API_BASE}/api/seller/upload`, {
       method: 'POST',
       headers,
@@ -491,6 +529,8 @@ export const sellerApi = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
     const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
+    // Kiểm tra cấu hình API trước khi gọi (ném `ApiConfigError` rõ ràng).
+    assertApiConfigured()
     // Don't set Content-Type for FormData - browser will set it with boundary
     return fetch(`${API_BASE}/api/seller/contracts`, {
       method: 'POST',
@@ -1107,6 +1147,35 @@ export const adminApi = {
       AnalyticsRealtimeReport & { success?: boolean; data?: AnalyticsRealtimeReport }
     >('/api/admin/analytics/realtime')
     return unwrapAnalytics<AnalyticsRealtimeReport>(raw)
+  },
+
+  // ── Số liệu GA4 đã đồng bộ vào MongoDB ───────────────────────────────
+  // Số SESSIONS theo nguồn, lấy từ dimension `sessionSourceMedium` của
+  // GA4 Data API. Facebook và Threads được tách riêng (KHÔNG lấy từ nhóm
+  // tổng hợp Organic Social).
+  //
+  // Dữ liệu đã được đồng bộ trước (upsert theo ngày+nguồn) ⇒ đọc nhanh và
+  // không tốn quota GA4 mỗi lần mở trang.
+  getAnalyticsGa4: async (period: AnalyticsPeriod = '7d') => {
+    const raw = await api<
+      Ga4TrafficReport & { success?: boolean; data?: Ga4TrafficReport }
+    >(`/api/admin/analytics/ga4?period=${period}`)
+    return unwrapAnalytics<Ga4TrafficReport>(raw)
+  },
+
+  // Kích hoạt đồng bộ GA4 → MongoDB (upsert, chống trùng).
+  syncAnalyticsGa4: async (days?: number) => {
+    const raw = await api<{
+      success: boolean
+      synced: number
+      days: number
+      lastSyncedAt: string
+      message?: string
+    }>('/api/admin/analytics/ga4/sync', {
+      method: 'POST',
+      body: days ? { days } : {},
+    })
+    return raw
   },
 
   // Moderation actions on a website review (Task 5).
@@ -1758,6 +1827,59 @@ export type AnalyticsSourceGroup = {
    * "largest remainder" nên TỔNG các `percent` LUÔN đúng 100%.
    */
   percent: number
+}
+
+/**
+ * Một nhóm nguồn trong báo cáo GA4 — đơn vị là SESSIONS (phiên), lấy từ
+ * dimension `sessionSourceMedium` của GA4 Data API.
+ */
+export type Ga4SourceGroup = {
+  key: 'facebook' | 'threads' | 'google' | 'direct'
+  label: string
+  /** Số phiên (sessions) của nhóm nguồn này trong kỳ. */
+  sessions: number
+  /** Tỷ lệ % của nhóm — tổng luôn đúng 100%. */
+  percent: number
+}
+
+/** Chi tiết từng cặp source/medium của GA4 (để đối chiếu với GA4 UI). */
+export type Ga4BreakdownRow = {
+  /** Chuỗi "source / medium" nguyên bản của GA4. */
+  sourceMedium: string
+  /** Nhóm nguồn đã phân loại. */
+  source: 'facebook' | 'threads' | 'google' | 'direct'
+  sessions: number
+}
+
+/**
+ * Báo cáo lượt truy cập theo nguồn lấy từ GA4 (đã đồng bộ vào MongoDB).
+ *
+ * KHÁC `AnalyticsTrafficReport` (dữ liệu tự ghi của tracker):
+ *  • Đơn vị là SESSIONS của GA4, không phải lượt truy cập tự ghi.
+ *  • Có kỳ "Toàn bộ" và chi tiết `breakdown` theo source/medium.
+ */
+export type Ga4TrafficReport = {
+  period: AnalyticsPeriod
+  periodLabel: string
+  totals: {
+    /** TỔNG số sessions trong kỳ. */
+    totalSessions: number
+    /** Tổng các nhóm nguồn — luôn bằng `totalSessions`. */
+    groupedTotal: number
+    /** Ngày đầu tiên có dữ liệu đã đồng bộ (YYYY-MM-DD). */
+    firstRecordedDate: string | null
+    /** Thời điểm đồng bộ GA4 gần nhất (ISO). */
+    lastSyncedAt: string | null
+    /** Số ngày đã đồng bộ trong lần gần nhất. */
+    syncedDays: number | null
+  }
+  sources: Ga4SourceGroup[]
+  /** Chuỗi ngày — mỗi ngày 1 điểm. */
+  daily: { date: string; sessions: number }[]
+  /** Chi tiết từng source/medium của GA4. */
+  breakdown: Ga4BreakdownRow[]
+  note: string
+  generatedAt: string
 }
 
 /** Một điểm trong chuỗi lượt truy cập theo ngày. */

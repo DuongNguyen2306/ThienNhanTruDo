@@ -5,6 +5,7 @@ const revenueHelper = require('../helpers/revenueHelper');
 const reviewHelper = require('../helpers/websiteReviewHelper');
 const internalStore = require('../helpers/internalStore');
 const ga4Service = require('../services/ga4Service');
+const ga4SyncService = require('../services/ga4SyncService');
 const trafficService = require('../services/trafficService');
 
 const router = express.Router();
@@ -1320,6 +1321,71 @@ router.get('/analytics/traffic', async (req, res, next) => {
     res.status(500).json({
       error: error.message || 'Không đọc được dữ liệu lượt truy cập.',
       code: 'TRAFFIC_ERROR',
+    });
+  }
+});
+
+// ============================================
+// GET /api/admin/analytics/ga4
+// Số SESSIONS theo nguồn từ GA4 Data API — đã ĐỒNG BỘ vào MongoDB.
+//
+// NGUỒN: dimension `sessionSourceMedium` + metric `sessions` của GA4.
+//   • Facebook và Threads được tách RIÊNG từ sessionSourceMedium
+//     (KHÔNG lấy từ nhóm tổng hợp `sessionDefaultChannelGroup` = Organic
+//     Social, vì nhóm đó gộp cả Facebook lẫn Threads lẫn Instagram).
+//   • Mọi nguồn còn lại → "Trực tiếp / Khác".
+//
+// Dữ liệu đọc từ collection `ga4_traffic_daily` (đã upsert theo ngày+nguồn)
+// ⇒ không tốn quota GA4 mỗi lần mở trang.
+//
+// Query:
+//   period = today | 7d | 30d | all
+// ============================================
+router.get('/analytics/ga4', async (req, res, next) => {
+  try {
+    const { period = '7d' } = req.query;
+    const report = await ga4SyncService.getSyncedReport(period);
+    res.json(report);
+  } catch (error) {
+    console.error('[admin/analytics/ga4]', error.message);
+    res.status(500).json({
+      error: error.message || 'Không đọc được số liệu GA4.',
+      code: 'GA4_SYNC_ERROR',
+    });
+  }
+});
+
+// ============================================
+// POST /api/admin/analytics/ga4/sync
+// Đồng bộ số liệu GA4 → MongoDB bằng UPSERT (chống trùng).
+//
+// Body: { days?: number }  (mặc định 90, tối đa 400)
+//
+// Chạy lại nhiều lần KHÔNG nhân đôi số liệu: upsert theo (date, source).
+// ============================================
+router.post('/analytics/ga4/sync', async (req, res, next) => {
+  try {
+    if (!ga4Service.isConfigured()) {
+      return res.status(503).json({
+        error:
+          'GA4 chưa được cấu hình (thiếu GA4_PROPERTY_ID hoặc thông tin xác thực Google).',
+        code: 'GA4_NOT_CONFIGURED',
+      });
+    }
+
+    const days = req.body?.days ? Number(req.body.days) : undefined;
+    const result = await ga4SyncService.syncFromGa4({ days });
+
+    res.json({
+      success: true,
+      ...result,
+      message: `Đã đồng bộ ${result.synced} bản ghi từ GA4 (${result.days} ngày gần nhất).`,
+    });
+  } catch (error) {
+    console.error('[admin/analytics/ga4/sync]', error.message);
+    res.status(500).json({
+      error: error.message || 'Không đồng bộ được số liệu GA4.',
+      code: 'GA4_SYNC_ERROR',
     });
   }
 });
