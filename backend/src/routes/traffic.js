@@ -78,6 +78,9 @@ router.post('/visit', visitRateLimiter, async (req, res, next) => {
       landingPath: body.landingPath,
       // Hostname website lấy từ header (Origin/Referer) — không tin body.
       siteHost: readSiteHost(req),
+      // Tên tham số click id (fbclid/gclid/…) — dùng để nhận diện lượt
+      // từ quảng cáo khi referrer bị Facebook/Threads chặn.
+      clickIdParam: body.clickIdParam,
     });
 
     // Luôn trả 200 để client không phải xử lý lỗi (analytics không được

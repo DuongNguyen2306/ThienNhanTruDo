@@ -37,6 +37,33 @@ const COLLECTION_NAME = 'ga4_traffic_daily';
 const META_COLLECTION_NAME = 'ga4_traffic_sync_meta';
 
 /**
+ * Collection lưu số lượt theo nguồn, đọc từ CUSTOM EVENT `traffic_source`
+ * của GA4 (event parameter `traffic_source`).
+ *
+ * VÌ SAO CẦN COLLECTION RIÊNG
+ *  • `sessionSourceMedium` là dimension CHUẨN của GA4 — nó gán nguồn ở mức
+ *    phiên theo thứ tự ưu tiên (referrer → UTM →…). Với link quảng cáo
+ *    Facebook mở trong app browser, Facebook KHÔNG gửi referrer và UTM
+ *    không có ⇒ GA4 rơi về `(direct) / (none)` ⇒ Facebook = 0.
+ *  • Event `traffic_source` mà frontend bắn lại mang theo nguồn đã được
+ *    chuẩn hoá sẵn (`facebook`, `threads`, `google`, …) ⇒ đây mới là nơi
+ *    GA4 ghi nhận đúng lượt Facebook.
+ *
+ *  ⇒ Hai nguồn bổ sung cho nhau, KHÔNG thay thế nhau. Collection riêng để
+ *    không trộn hai loại số liệu (sessions vs event count).
+ */
+const CUSTOM_EVENT_COLLECTION_NAME = 'ga4_custom_event_daily';
+
+/**
+ * Tên event + event parameter chứa nguồn chuẩn hoá.
+ *
+ * Frontend bắn event `traffic_source` với parameter `traffic_source`
+ * (xem `components/ga4-provider.tsx`).
+ */
+const CUSTOM_EVENT_NAME = 'traffic_source';
+const CUSTOM_EVENT_DIMENSION = 'customEvent:traffic_source';
+
+/**
  * Khoá nguồn hiển thị — KHÔNG trùng nhau, phủ kín 4 nhóm.
  * `source` khớp với giá trị `source` của collection `ga4_traffic_daily`.
  */
@@ -83,7 +110,22 @@ async function getMongo() {
   return {
     collection: db.collection(COLLECTION_NAME),
     meta: db.collection(META_COLLECTION_NAME),
+    customEvent: db.collection(CUSTOM_EVENT_COLLECTION_NAME),
   };
+}
+
+/**
+ * Collection chứa số lượt từ custom event `traffic_source`.
+ *
+ * Dùng chung kết nối Mongo đã mở (không tạo client mới).
+ */
+async function customCollection() {
+  const { customEvent } = await getMongo();
+  await customEvent.createIndex(
+    { date: 1, source: 1 },
+    { unique: true, name: 'uniq_date_source_custom_event' }
+  );
+  return customEvent;
 }
 
 /**
@@ -203,6 +245,65 @@ async function fetchRowsFromGa4(days) {
 }
 
 /**
+ * Tải số lượt theo (ngày, nguồn) từ CUSTOM EVENT `traffic_source` của GA4.
+ *
+ * Dùng event parameter `customEvent:traffic_source` — nơi GA4 thực sự ghi
+ * nhận nguồn đã chuẩn hoá (facebook / threads / google / …).
+ *
+ * LƯU Ý QUAN TRỌNG
+ *  Custom dimension phải được ĐĂNG KÝ trong GA4 Admin (Admin → Custom
+ *  definitions) thì mới query được. Nếu chưa đăng ký, GA4 trả
+ *  INVALID_ARGUMENT ⇒ hàm này trả `null` (KHÔNG ném lỗi) để phần còn lại
+ *  của hệ thống vẫn chạy bình thường bằng `sessionSourceMedium`.
+ *
+ * @param {number} days số ngày gần nhất cần lấy
+ * @returns {Promise<Array<{ date: string, source: string, count: number }>|null>}
+ *          `null` = không đọc được (dimension chưa đăng ký / lỗi quyền).
+ */
+async function fetchCustomEventRows(days) {
+  const client = ga4Service.getClient();
+  const propertyId = process.env.GA4_PROPERTY_ID;
+  if (!propertyId) return null;
+
+  try {
+    const [report] = await client.runReport({
+      property: `properties/${propertyId}`,
+      dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+      dimensions: [{ name: 'date' }, { name: CUSTOM_EVENT_DIMENSION }],
+      metrics: [{ name: 'eventCount' }],
+      dimensionFilter: {
+        filter: {
+          fieldName: 'eventName',
+          stringFilter: { value: CUSTOM_EVENT_NAME },
+        },
+      },
+      limit: 100000,
+    });
+
+    const rows = [];
+    for (const row of report.rows || []) {
+      const date = normalizeGaDate(row.dimensionValues?.[0]?.value);
+      const rawSource = String(
+        row.dimensionValues?.[1]?.value || ''
+      ).trim().toLowerCase();
+      const count = Number(row.metricValues?.[0]?.value) || 0;
+      if (!date || !rawSource || count <= 0) continue;
+      rows.push({ date, source: classifySource(rawSource), count });
+    }
+    return rows;
+  } catch (error) {
+    // Dimension chưa đăng ký trong GA4 (INVALID_ARGUMENT) hoặc service account
+    // chưa có quyền ⇒ bỏ qua, dùng nguồn `sessionSourceMedium` thay thế.
+    console.warn(
+      `[ga4Sync] Không đọc được custom event "${CUSTOM_EVENT_NAME}" ` +
+        `(${error.code || 'ERROR'}): ${error.message}. ` +
+        'Cần đăng ký custom dimension "traffic_source" trong GA4 Admin để đọc được.'
+    );
+    return null;
+  }
+}
+
+/**
  * Gom các dòng GA4 thành bản ghi theo (ngày, nhóm nguồn).
  *
  * Mỗi bản ghi giữ luôn `breakdown` (chi tiết từng source/medium) để Admin
@@ -237,6 +338,29 @@ function groupRows(rows) {
 }
 
 /**
+ * Gom các dòng custom event thành bản ghi theo (ngày, nhóm nguồn).
+ *
+ * Khác với `groupRows` (dùng `sessions`), ở đây đếm EVENT COUNT — mỗi lần
+ * frontend bắn event `traffic_source` tương ứng 1 lượt truy cập.
+ */
+function groupCustomEventRows(rows) {
+  /** @type {Map<string, { date: string, source: string, count: number }>} */
+  const grouped = new Map();
+
+  for (const row of rows) {
+    const key = `${row.date}__${row.source}`;
+    const bucket = grouped.get(key);
+    if (bucket) {
+      bucket.count += row.count;
+    } else {
+      grouped.set(key, { date: row.date, source: row.source, count: row.count });
+    }
+  }
+
+  return [...grouped.values()];
+}
+
+/**
  * Đồng bộ dữ liệu GA4 vào MongoDB bằng UPSERT.
  *
  * - Bộ lọc upsert: `{ date, source }` (khớp unique index) ⇒ chạy lại nhiều
@@ -262,10 +386,41 @@ async function syncFromGa4(options = {}) {
   const rows = await fetchRowsFromGa4(days);
   const grouped = groupRows(rows);
 
+  const now = new Date();
+
+  // ── Custom event `traffic_source` (nguồn đã chuẩn hoá) ────────────────
+  // Bổ sung cho `sessionSourceMedium`: đây là nơi GA4 ghi nhận đúng lượt
+  // Facebook (khi mở link quảng cáo trong app browser, GA4 rơi về direct).
+  // `null` khi custom dimension chưa được đăng ký trong GA4.
+  const customRows = await fetchCustomEventRows(days);
+
   const { collection, meta } = await getMongo();
   await ensureIndexes(collection);
 
-  const now = new Date();
+  let customSynced = 0;
+  if (customRows && customRows.length > 0) {
+    const customOps = groupCustomEventRows(customRows).map((item) => ({
+      updateOne: {
+        filter: { date: item.date, source: item.source },
+        update: {
+          $set: {
+            date: item.date,
+            source: item.source,
+            count: item.count,
+            updatedAt: now,
+          },
+          $setOnInsert: { createdAt: now },
+        },
+        upsert: true,
+      },
+    }));
+    const customResult = await customCollection().bulkWrite(customOps, {
+      ordered: false,
+    });
+    customSynced =
+      (customResult.upsertedCount || 0) + (customResult.modifiedCount || 0);
+  }
+
   let synced = 0;
 
   if (grouped.length > 0) {
@@ -300,12 +455,13 @@ async function syncFromGa4(options = {}) {
         propertyId: process.env.GA4_PROPERTY_ID || null,
         rowsFetched: rows.length,
         recordsWritten: synced,
+        customEventRecordsWritten: customSynced,
       },
     },
     { upsert: true }
   );
 
-  return { synced, days, lastSyncedAt };
+  return { synced, customSynced, days, lastSyncedAt };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -413,6 +569,34 @@ async function getSyncedReport(period) {
     sessions: row.sessions,
   }));
 
+  // ── Custom event `traffic_source` (nguồn đã chuẩn hoá) ────────────────
+  // Đây là nơi GA4 ghi nhận đúng lượt Facebook (khi mở link quảng cáo trong
+  // app browser, `sessionSourceMedium` rơi về `(direct) / (none)`).
+  // Collection rỗng / không tồn tại ⇒ chưa đăng ký custom dimension hoặc
+  // chưa đồng bộ ⇒ báo `available: false`, KHÔNG làm hỏng báo cáo chính.
+  let customEvent = { available: false, bySource: {}, total: 0 };
+  try {
+    const { customEvent: customCol } = await getMongo();
+    const customRows = await customCol
+      .aggregate([
+        { $match: match },
+        { $group: { _id: '$source', count: { $sum: '$count' } } },
+      ])
+      .toArray();
+
+    if (customRows.length > 0) {
+      const customMap = {};
+      for (const row of customRows) customMap[row._id] = row.count;
+      customEvent = {
+        available: true,
+        bySource: customMap,
+        total: customRows.reduce((sum, row) => sum + row.count, 0),
+      };
+    }
+  } catch (error) {
+    console.warn('[ga4Sync] Không đọc được custom event:', error.message);
+  }
+
   // ── Metadata lần đồng bộ gần nhất ────────────────────────────────────
   const metaDoc = await meta.find({ _id: 'last_sync' }).next();
 
@@ -438,10 +622,26 @@ async function getSyncedReport(period) {
     sources: sources.map((s) => ({ ...s, percent: percents[s.key] ?? 0 })),
     daily,
     breakdown,
+    /**
+     * Số lượt theo nguồn đọc từ CUSTOM EVENT `traffic_source` của GA4.
+     *
+     * Khớp với bảng drill-down trong GA4 UI (Reports → Events → traffic_source
+     * → parameter traffic_source), nơi bạn thấy Facebook = 1.
+     *
+     * `available: false` ⇒ custom dimension chưa được đăng ký trong GA4
+     * Admin ⇒ chưa đọc được; hệ thống vẫn chạy bình thường bằng
+     * `sessionSourceMedium`.
+     */
+    customEvent,
     note:
       'Số liệu lấy từ GA4 Data API (dimension sessionSourceMedium, metric sessions) ' +
       'đã đồng bộ vào MongoDB bằng upsert theo (ngày, nguồn) nên chạy lại không nhân đôi số liệu. ' +
-      'Facebook và Threads được tách riêng từ sessionSourceMedium, không lấy từ nhóm tổng hợp Organic Social.',
+      'Facebook và Threads được tách riêng từ sessionSourceMedium, không lấy từ nhóm tổng hợp Organic Social. ' +
+      (customEvent.available
+        ? 'Ngoài ra, số lượt theo nguồn đã chuẩn hoá được đọc từ custom event "traffic_source" ' +
+          '(khớp với bảng drill-down trong GA4 UI).'
+        : 'Custom event "traffic_source" chưa đọc được — cần đăng ký custom dimension ' +
+          '"traffic_source" trong GA4 Admin (Admin → Data display → Custom definitions).'),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -449,6 +649,7 @@ async function getSyncedReport(period) {
 module.exports = {
   COLLECTION_NAME,
   META_COLLECTION_NAME,
+  CUSTOM_EVENT_COLLECTION_NAME,
   SOURCE_GROUPS,
   PERIODS,
   MAX_SYNC_DAYS,
@@ -456,6 +657,8 @@ module.exports = {
   classifySource,
   normalizeGaDate,
   groupRows,
+  groupCustomEventRows,
+  fetchCustomEventRows,
   syncFromGa4,
   getSyncedReport,
   todayVn,

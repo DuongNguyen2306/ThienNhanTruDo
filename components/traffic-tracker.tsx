@@ -51,6 +51,22 @@ type TrafficPayload = {
    * dev/test (`localhost`). Giá trị này KHÔNG chứa PII.
    */
   siteHost: string
+  /**
+   * TÊN tham số click id của nền tảng quảng cáo (`fbclid`, `gclid`, …).
+   *
+   * VÌ SAO CẦN:
+   *  Link quảng cáo Facebook có dạng `/?fbclid=...`. Trong app browser của
+   *  Facebook/Threads, trình duyệt KHÔNG gửi referrer (chính sách bảo mật
+   *  của họ) ⇒ không có tín hiệu nào để biết lượt đó đến từ Facebook.
+   *
+   *  Click id là tín hiệu ĐẦU TIÊN và đáng tin cậy nhất — cùng thứ tự ưu
+   *  tiên mà `deriveTrafficInfo()` dùng để bắn event lên GA4. Nhờ vậy số
+   *  liệu trên web khớp với số liệu GA4.
+   *
+   *  Click id KHÔNG chứa PII (mã định danh quảng cáo, không phải dữ liệu
+   *  người dùng) nên gửi lên backend là an toàn.
+   */
+  clickIdParam: string
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -167,6 +183,38 @@ function readLandingPath(): string {
   return window.location.pathname || '/'
 }
 
+/**
+ * Tên tham số click id của nền tảng quảng cáo, nếu có.
+ *
+ * CHỈ gửi TÊN tham số (`fbclid`, `gclid`, …), KHÔNG gửi giá trị — giá trị
+ * không cần thiết để phân loại nguồn, và gửi TÊN tham số làm payload nhỏ
+ * nhất có thể.
+ *
+ * Thứ tự ưu tiên (khớp với `deriveTrafficInfo` trong `lib/analytics.ts`):
+ *   fbclid → gclid → gbraid → wbraid → ttclid → twclid
+ */
+function readClickIdParam(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const candidates = [
+      'fbclid',
+      'gclid',
+      'gbraid',
+      'wbraid',
+      'ttclid',
+      'twclid',
+    ]
+    for (const name of candidates) {
+      const value = params.get(name)
+      if (value && value.trim()) return name
+    }
+    return ''
+  } catch {
+    return ''
+  }
+}
+
 /** Hostname của website đang xem (không PII). */
 function readSiteHost(): string {
   if (typeof window === 'undefined') return ''
@@ -233,6 +281,7 @@ export function trackVisitOnce(): void {
     referrer: safeReferrerHost(),
     landingPath: readLandingPath(),
     siteHost: readSiteHost(),
+    clickIdParam: readClickIdParam(),
   })
 }
 

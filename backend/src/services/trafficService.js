@@ -148,6 +148,42 @@ function classifyUtmSource(utmSource) {
 }
 
 /**
+ * Phân loại nguồn từ TÊN tham số click id mà client gửi lên.
+ *
+ * Click id là dấu hiệu ĐẦU TIÊN và đáng tin cậy nhất cho lượt từ quảng cáo:
+ *    • `fbclid` → Facebook / Meta (Facebook & Threads đều dùng Meta ads)
+ *    • `gclid`, `gbraid`, `wbraid` → Google Ads
+ *    • `ttclid` → TikTok, `twclid` → X (gộp vào Trực tiếp / Khác)
+ *
+ * VÌ SAO CẦN:
+ *  Link quảng cáo Facebook có dạng `https://site.com/?fbclid=...`. Trong app
+ *  browser của Facebook/Threads, trình duyệt KHÔNG gửi referrer (chính sách
+ *  bảo mật của họ) ⇒ `document.referrer` rỗng ⇒ không có tín hiệu nào để biết
+ *  lượt đó đến từ Facebook.
+ *
+ *  Click id KHÔNG chứa PII — đây là mã định danh quảng cáo.
+ *
+ * @param {string} paramName tên tham số (fbclid, gclid, …)
+ * @returns {{ source: string, matched: boolean }}
+ */
+function classifyClickIdParam(paramName) {
+  const raw = cleanString(paramName, 64).toLowerCase();
+  if (!raw) return { source: SOURCE_DIRECT, matched: false };
+
+  if (raw === 'fbclid') {
+    return { source: SOURCE_FACEBOOK, matched: true };
+  }
+  if (raw === 'gclid' || raw === 'gbraid' || raw === 'wbraid') {
+    return { source: SOURCE_GOOGLE, matched: true };
+  }
+  // TikTok / X — không có nhóm riêng ⇒ gộp vào Trực tiếp / Khác.
+  if (raw === 'ttclid' || raw === 'twclid') {
+    return { source: SOURCE_DIRECT, matched: false };
+  }
+  return { source: SOURCE_DIRECT, matched: false };
+}
+
+/**
  * Chuẩn hoá `utm_medium` — chỉ giữ các giá trị quen thuộc.
  */
 function classifyUtmMedium(utmMedium) {
@@ -297,19 +333,30 @@ function generateSessionId() {
  * @param {string} [input.referrer]    — document.referrer (URL đầy đủ)
  * @param {string} [input.landingPath] — pathname đầu tiên
  * @param {string} [input.siteHost]    — hostname của website gửi lượt truy cập
+ * @param {string} [input.clickIdParam] — tên tham số click id (fbclid, gclid…)
  * @returns {Promise<{ counted: boolean, source: string, medium: string }>}
  */
 async function recordVisit(input = {}) {
   const sessionIdRaw = cleanString(input.sessionId, MAX_LEN.sessionId);
   const sessionId = sessionIdRaw || generateSessionId();
 
-  // ── Xác định nguồn: UTM hợp lệ → referrer hợp lệ → direct_other ────────
+  // ── Xác định nguồn (cùng thứ tự ưu tiên với `deriveTrafficInfo` ở
+  //    frontend ⇒ số liệu web khớp với số liệu GA4):
+  //      1. Click id (fbclid/gclid) — tín hiệu đáng tin cậy nhất
+  //      2. utm_source hợp lệ
+  //      3. referrer hợp lệ
+  //      4. direct_other
+  const clickId = classifyClickIdParam(input.clickIdParam);
   const utm = classifyUtmSource(input.utmSource);
   const referrerHost = extractReferrerHost(input.referrer);
 
   let source;
   let medium;
-  if (utm.matched) {
+  if (clickId.matched) {
+    source = clickId.source;
+    // Facebook → 'social', Google → 'cpc' (khớp với GA4).
+    medium = source === SOURCE_GOOGLE ? 'cpc' : 'social';
+  } else if (utm.matched) {
     source = utm.source;
     medium = classifyUtmMedium(input.utmMedium);
     if (medium === '(none)') {
@@ -693,6 +740,7 @@ module.exports = {
   recordVisit,
   getTrafficStats,
   classifyUtmSource,
+  classifyClickIdParam,
   classifyReferrerHost,
   extractReferrerHost,
   sanitizeLandingPath,
