@@ -52,3 +52,5 @@
  GET /admin/analytics 200 in 63ms (next.js: 11ms, proxy.ts: 4ms, application-code: 47ms)
  GET /admin/analytics 200 in 38ms (next.js: 5ms, proxy.ts: 4ms, application-code: 29ms)
  GET /dang-nhap?next=%2Fadmin%2Fanalytics 200 in 241ms (next.js: 93ms, application-code: 148ms)
+  Reload env: .env.local
+  Reload env: .env.local

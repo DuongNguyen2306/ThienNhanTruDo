@@ -420,6 +420,11 @@ export default function AdminAnalyticsPage() {
   const groupedTotal = report?.totals?.groupedTotal ?? 0
   /** Số lượt dev/test đang bị ẩn khỏi số liệu. */
   const excludedLocalVisits = report?.totals?.excludedLocalVisits ?? 0
+  /**
+   * Số lượt lịch sử chưa xác định được website (bản ghi cũ không có
+   * `siteHost`). KHÔNG được tự động tính vào khách thật.
+   */
+  const unknownOriginVisits = report?.totals?.unknownOriginVisits ?? 0
 
   const hasTraffic = totalVisits > 0
 
@@ -492,6 +497,16 @@ export default function AdminAnalyticsPage() {
               </span>
             ) : null}
           </label>
+
+          {/* Bản ghi chưa xác định được website — báo riêng, không tính vào
+              khách thật. */}
+          {unknownOriginVisits > 0 ? (
+            <p className="max-w-sm rounded-xl border-2 border-[#151515]/25 bg-[#F5F5F0] px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#151515]/65">
+              Có <strong className="font-black text-[#151515]">{unknownOriginVisits}</strong>{' '}
+              lượt lịch sử chưa xác định được website (bản ghi cũ) — không được
+              tính vào số liệu khách thật.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -781,6 +796,13 @@ export default function AdminAnalyticsPage() {
                     ? `${excludedLocalVisits} lượt truy cập từ localhost đang được ẩn khỏi số liệu (không phải khách thật).`
                     : 'Không có lượt truy cập nào từ localhost trong kỳ này.'}
                 </li>
+                {unknownOriginVisits > 0 ? (
+                  <li>
+                    • <strong className="font-black text-[#151515]">Chưa xác định</strong>:{' '}
+                    {unknownOriginVisits} lượt lịch sử không có thông tin website — không
+                    được tính vào số liệu khách thật.
+                  </li>
+                ) : null}
                 {report?.note ? <li>• {report.note}</li> : null}
               </ul>
             </div>

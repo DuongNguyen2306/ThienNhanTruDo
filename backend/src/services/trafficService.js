@@ -616,6 +616,7 @@ async function getTrafficStats(period, options = {}) {
     .limit(1)
     .project({ createdAt: 1 })
     .next();
+
   // ── 4. Phân bổ theo hostname + phân nhóm nguồn website ────────────────
   // Tuân theo `includeLocal`: mặc định chỉ liệt kê website production.
   const byHost = await collection
