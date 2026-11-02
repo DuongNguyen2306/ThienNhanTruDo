@@ -78,7 +78,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Trạng thái hệ thống</p>
             <p className="mt-2 flex items-center gap-2 text-emerald-700"><span className="size-2 rounded-full bg-emerald-500" /> API VNPay · Mọi dịch vụ ổn định</p>
             <p className="mt-1 flex items-center gap-2 text-emerald-700"><span className="size-2 rounded-full bg-emerald-500" /> Map tile · 99,8% uptime</p>
-            <p className="mt-1 flex items-center gap-2 text-amber-600"><span className="size-2 rounded-full bg-amber-500" /> OTP queue · đang xử lý</p>
+            <p className="mt-1 flex items-center gap-2 text-emerald-700"><span className="size-2 rounded-full bg-emerald-500" /> OTP queue · đã hoàn thành</p>
           </div>
         }
       />
