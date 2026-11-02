@@ -37,6 +37,8 @@ import {
   type AnalyticsSourceGroup,
   type AnalyticsTrafficReport,
 } from '@/lib/api'
+import { cn } from '@/lib/utils'
+
 const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
   { value: 'today', label: 'Hôm nay' },
   { value: '7d', label: '7 ngày' },
@@ -133,7 +135,15 @@ function BrutalCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border-[3px] border-[#151515] bg-white shadow-[4px_4px_0_#151515] ${className}`}
+      // Dùng `cn()` (tailwind-merge) thay vì nối chuỗi: `bg-white` mặc định
+      // và `bg-[#151515]` (nền tối của panel Realtime) có CÙNG độ đặc hiệu,
+      // nên nối chuỗi sẽ để thứ tự trong CSS quyết định thắng thua — gây nền
+      // trắng và chữ trắng biến mất. tailwind-merge loại bỏ class cũ, giữ
+      // class mới ⇒ luôn đúng màu.
+      className={cn(
+        'rounded-2xl border-[3px] border-[#151515] bg-white shadow-[4px_4px_0_#151515]',
+        className
+      )}
     >
       {children}
     </div>
