@@ -1082,12 +1082,20 @@ export const adminApi = {
       room: { totalReviews: number; hiddenCount: number }
     }>('/api/admin/reviews/stats'),
 
-  // ── Website traffic statistics (Google Analytics 4 Data API) ──────────
-  // Dữ liệu lịch sử theo nguồn truy cập. `period`: 'today' | '7d' | '30d'.
-  getAnalyticsTraffic: async (period: AnalyticsPeriod = '7d') => {
+  // ── Website traffic statistics (own MongoDB store) ────────────────────
+  // Dữ liệu lịch sử theo nguồn truy cập. `period`: 'today' | '7d' | '30d' | 'all'.
+  //
+  // `includeLocal`: mặc định `false` ⇒ CHỈ tính lượt truy cập từ domain
+  // thật (không tính localhost / *.local — tức lượt từ dev & test).
+  getAnalyticsTraffic: async (
+    period: AnalyticsPeriod = '7d',
+    includeLocal = false
+  ) => {
+    const query = new URLSearchParams({ period })
+    if (includeLocal) query.set('includeLocal', '1')
     const raw = await api<
       AnalyticsTrafficReport & { success?: boolean; data?: AnalyticsTrafficReport }
-    >(`/api/admin/analytics/traffic?period=${encodeURIComponent(period)}`)
+    >(`/api/admin/analytics/traffic?${query.toString()}`)
     // Backend có thể trả dạng phẳng hoặc bọc trong `data` — chuẩn hoá ở đây
     // để component không phụ thuộc vào shape.
     return unwrapAnalytics<AnalyticsTrafficReport>(raw)
@@ -1720,7 +1728,7 @@ export type UserGrowthPoint = {
   seller: number
 }
 
-// ── Google Analytics 4 traffic types ─────────────────────────────────────
+// ── Traffic statistics (own MongoDB store) ───────────────────────────────
 // Backend có thể trả payload dạng phẳng hoặc bọc trong `data`.
 // Helper này gỡ bỏ vỏ bọc để component không phụ thuộc vào shape.
 function unwrapAnalytics<T>(
@@ -1731,38 +1739,62 @@ function unwrapAnalytics<T>(
   return payload
 }
 
-// Khoảng thời gian của báo cáo lịch sử.
-export type AnalyticsPeriod = 'today' | '7d' | '30d'
+/** Khoảng thời gian của báo cáo lượt truy cập. */
+export type AnalyticsPeriod = 'today' | '7d' | '30d' | 'all'
 
-/** Một dòng chi tiết theo `sessionSourceMedium` của GA4. */
-export type AnalyticsSourceBreakdown = {
-  sourceMedium: string
-  sessions: number
-  activeUsers: number
-}
-
-/** Một nhóm nguồn đã được gom (Facebook / Threads / Google / Trực tiếp-Khác). */
+/**
+ * Một nhóm nguồn đã được gom (Facebook / Threads / Google / Trực tiếp-Khác).
+ *
+ * KHÔNG có `activeUsers` / `breakdown` nữa — dữ liệu mới đếm LƯỢT TRUY CẬP
+ * (phiên), không xác định được danh tính người dùng nên không gắn nhãn
+ * "người dùng" cho dữ liệu phiên.
+ */
 export type AnalyticsSourceGroup = {
   key: 'facebook' | 'threads' | 'google' | 'direct'
   label: string
-  sessions: number
-  activeUsers: number
-  breakdown: AnalyticsSourceBreakdown[]
+  visits: number
+  /**
+   * Tỷ lệ % của nhóm này trong kỳ. Backend tính bằng phương pháp
+   * "largest remainder" nên TỔNG các `percent` LUÔN đúng 100%.
+   */
+  percent: number
+}
+
+/** Một điểm trong chuỗi lượt truy cập theo ngày. */
+export type AnalyticsDailyPoint = {
+  date: string
+  visits: number
 }
 
 export type AnalyticsTrafficReport = {
   period: AnalyticsPeriod
   periodLabel: string
-  dateRange: { startDate: string; endDate: string }
   totals: {
-    /** Người dùng DUY NHẤT — lấy từ truy vấn tổng, KHÔNG cộng từ các nguồn. */
-    totalUsers: number
-    totalSessions: number
-    totalActiveUsers: number
-    /** Tổng activeUsers của các nguồn (có thể > totalUsers do trùng người). */
-    usersBySourceSum: number
+    /** TỔNG lượt truy cập (phiên) trong kỳ. */
+    totalVisits: number
+    /** Tổng các nhóm nguồn — luôn bằng `totalVisits`. */
+    groupedTotal: number
+    /** LUÔN null: hệ thống không xác định được "người dùng duy nhất". */
+    uniqueUsers: null
+    /**
+     * Số lượt truy cập từ localhost/*.local đã bị LOẠI khỏi số liệu
+     * (dev & test — không phải khách thật).
+     */
+    excludedLocalVisits: number
+    /**
+     * Số lượt lịch sử chưa xác định được website (bản ghi cũ không có
+     * `siteHost`). KHÔNG được tự động tính vào khách thật.
+     */
+    unknownOriginVisits: number
   }
   sources: AnalyticsSourceGroup[]
+  daily: AnalyticsDailyPoint[]
+  /** Phân bổ theo hostname website (để biết lượt đến từ domain nào). */
+  siteHosts: { host: string; visits: number }[]
+  /** true nếu số liệu đang tính CẢ lượt dev/test. */
+  includeLocal: boolean
+  /** Thời điểm bản ghi đầu tiên (ISO) — null nếu chưa có dữ liệu. */
+  firstRecordedAt: string | null
   note: string
   generatedAt: string
 }

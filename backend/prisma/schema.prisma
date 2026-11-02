@@ -885,3 +885,56 @@ model StarTransaction {
   @@index([userId, type])
   @@map("star_transactions")
 }
+
+// ============================================
+// TRAFFIC VISIT — Lượt truy cập tự ghi (thay GA4 sessionSourceMedium)
+// Mỗi PHIÊN = 1 bản ghi. Không dùng để đếm "người dùng duy nhất".
+// ============================================
+// source:  facebook | threads | google | direct_other
+// medium:  organic | cpc | social | referral | (none)
+// ============================================
+
+model TrafficVisit {
+  id           String   @id @default(uuid()) @map("_id")
+
+  // ── Idempotency key ──────────────────────────────────────────────────────
+  // Khóa chống đếm trùng ở tầng DB. Frontend gửi `sessionId` (random, sinh ở
+  // client) + backend tự tính lại khoá. Unique index ⇒ chỉ 1 bản ghi tồn tại
+  // cho mỗi phiên, kể cả khi request trùng chạy song song.
+  sessionId    String   @unique
+
+  // ── Phân loại nguồn ──────────────────────────────────────────────────────
+  source       String   @default("direct_other") // facebook | threads | google | direct_other
+  medium       String   @default("(none)")     // organic | cpc | social | referral | (none)
+
+  // Nguồn thô để đối chiếu (không chứa PII):
+  //   utmSource  — giá trị utm_source đã chuẩn hoá (chỉ khi hợp lệ)
+  //   referrerHost — hostname của referrer (không phải URL đầy đủ)
+  utmSource    String?
+  referrerHost String?
+
+  // ── Hostname của WEBSITE đã gửi lượt truy cập ──────────────────────────
+  // Cho phép phân biệt lượt truy cập thật (từ domain production) với lượt
+  // truy cập từ môi trường dev/test (localhost, 127.0.0.1, *.local).
+  // KHÔNG chứa PII — chỉ hostname.
+  siteHost     String?
+
+  // ── Cờ môi trường dev/test (lượt truy cập KHÔNG phải khách thật) ──────
+  // isLocal = true khi request đến từ localhost / 127.0.0.1 / *.local.
+  // Admin có thể lọc bỏ các lượt này khi xem số liệu.
+  isLocal      Boolean  @default(false)
+
+  // ── Trang đích đầu tiên (chỉ path, KHÔNG query để tránh lộ PII) ────────
+  landingPath  String?
+
+  // ── Timestamps ───────────────────────────────────────────────────────────
+  createdAt    DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+
+  // ── Indexes ──────────────────────────────────────────────────────────────
+  @@index([source, createdAt])
+  @@index([createdAt])
+  @@index([medium, createdAt])
+  @@index([siteHost, createdAt])
+  @@map("traffic_visits")
+}

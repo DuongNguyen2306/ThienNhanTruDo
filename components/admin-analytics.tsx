@@ -1,18 +1,22 @@
 'use client'
 
 /**
- * Admin → Thống kê truy cập (Google Analytics 4 Data API).
+ * Admin → Thống kê truy cập.
  *
- * Dữ liệu thật, không có mock:
- *   • Lịch sử  → GET /api/admin/analytics/traffic?period=today|7d|30d
- *   • Realtime → GET /api/admin/analytics/realtime (30 phút gần nhất)
+ * NGUỒN DỮ LIỆU: collection `traffic_visits` trong MongoDB (do chính website
+ * ghi nhận qua `POST /api/traffic/visit`), KHÔNG phải GA4 Data API.
+ *
+ *   • Lịch sử → GET /api/admin/analytics/traffic?period=today|7d|30d|all
+ *   • Realtime (GA4, 30 phút) → GET /api/admin/analytics/realtime
  *
  * Backend đã áp dụng `authorize('admin')` — giao diện chỉ là lớp trình bày,
  * không phải ranh giới bảo mật.
  *
- * Lưu ý số liệu: `totalUsers` là số người dùng DUY NHẤT lấy từ truy vấn
- * tổng của GA4. Tổng `activeUsers` của các nguồn có thể lớn hơn vì một
- * người có thể đến từ nhiều nguồn trong cùng khoảng thời gian.
+ * Lưu ý số liệu:
+ *  • MỗI PHIÊN 30 phút = 1 LƯỢT. Tổng các nhóm nguồn LUÔN bằng tổng lượt
+ *    truy cập (cùng một truy vấn aggregate).
+ *  • KHÔNG có "người dùng duy nhất" — hệ thống không xác định được danh tính
+ *    người dùng nên không gắn nhãn người dùng cho dữ liệu phiên.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -20,7 +24,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  ExternalLink,
+  CalendarDays,
   Globe,
   Loader2,
   RefreshCw,
@@ -38,6 +42,7 @@ const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
   { value: 'today', label: 'Hôm nay' },
   { value: '7d', label: '7 ngày' },
   { value: '30d', label: '30 ngày' },
+  { value: 'all', label: 'Toàn bộ' },
 ]
 
 /** Màu Neo-Brutalism cho từng nhóm nguồn. */
@@ -51,7 +56,12 @@ const SOURCE_STYLES: Record<string, { bg: string; text: string; bar: string }> =
 /** Icon Facebook (không có trong lucide-react). */
 function FacebookGlyph() {
   return (
-    <svg viewBox="0 0 24 24" className="size-5 text-[#151515]" fill="currentColor" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      className="size-5 text-[#151515]"
+      fill="currentColor"
+      aria-hidden
+    >
       <path d="M13.5 22v-8h2.7l.4-3.1h-3.1V8.9c0-.9.25-1.5 1.55-1.5h1.65V4.6c-.29-.04-1.27-.12-2.4-.12-2.38 0-4 1.45-4 4.11v2.32H7.6V14h2.7v8h3.2z" />
     </svg>
   )
@@ -59,6 +69,41 @@ function FacebookGlyph() {
 
 function formatNumber(value: number | undefined | null) {
   return (value ?? 0).toLocaleString('vi-VN')
+}
+
+/**
+ * Tỷ lệ phần trăm của từng nhóm nguồn.
+ *
+ * Dùng phương pháp "largest remainder" để tổng tỷ lệ LUÔN đúng 100%.
+ * Nếu dùng `Math.round` cho từng nhóm riêng lẻ, tổng có thể ra 101% hoặc
+ * 99% do sai số làm tròn — đây chính là lỗi khiến bảng cũ hiển thị 125%.
+ */
+function computePercentages(
+  sources: AnalyticsSourceGroup[],
+  total: number
+): Record<string, number> {
+  if (!total || total <= 0) {
+    return Object.fromEntries(sources.map((s) => [s.key, 0]))
+  }
+
+  const exact = sources.map((s) => (s.visits / total) * 100)
+  const floors = exact.map((v) => Math.floor(v))
+  let remainder = 100 - floors.reduce((sum, v) => sum + v, 0)
+
+  // Chia phần dư cho các nhóm có phần thập lớn nhất.
+  const order = exact
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac)
+
+  const result = [...floors]
+  let cursor = 0
+  while (remainder > 0 && order.length > 0) {
+    result[order[cursor % order.length].i] += 1
+    remainder -= 1
+    cursor += 1
+  }
+
+  return Object.fromEntries(sources.map((s, i) => [s.key, result[i]]))
 }
 
 function formatTime(iso: string) {
@@ -134,62 +179,19 @@ function MetricCard({
   )
 }
 
-function SourceCard({ source, max }: { source: AnalyticsSourceGroup; max: number }) {
-  const style = SOURCE_STYLES[source.key] ?? SOURCE_STYLES.direct
-  const percent = max > 0 ? Math.round((source.sessions / max) * 100) : 0
-
-  return (
-    <BrutalCard className="overflow-hidden">
-      {/* Header strip */}
-      <div
-        className={`flex items-center justify-between gap-2 border-b-[3px] border-[#151515] px-4 py-2.5 ${style.bg} ${style.text}`}
-      >
-        <span className="truncate text-sm font-black uppercase tracking-wide">
-          {source.label}
-        </span>
-        <span className="shrink-0 rounded-md border-2 border-[#151515] bg-white px-2 py-0.5 font-mono text-[11px] font-black text-[#151515]">
-          {percent}%
-        </span>
-      </div>
-
-      <div className="p-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#151515]/50">
-              Phiên
-            </p>
-            <p className="font-mono text-xl font-black text-[#151515]">
-              {formatNumber(source.sessions)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#151515]/50">
-              Người dùng
-            </p>
-            <p className="font-mono text-xl font-black text-[#151515]">
-              {formatNumber(source.activeUsers)}
-            </p>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="mt-3 h-3 w-full overflow-hidden rounded-full border-2 border-[#151515] bg-[#F5F5F0]">
-          <div
-            className={`h-full ${style.bar}`}
-            style={{ width: `${Math.max(percent, source.sessions > 0 ? 3 : 0)}%` }}
-          />
-        </div>
-      </div>
-    </BrutalCard>
-  )
-}
-
-function SourceBarChart({ sources }: { sources: AnalyticsSourceGroup[] }) {
-  const max = Math.max(...sources.map((s) => s.sessions), 0)
+function SourceBarChart({
+  sources,
+  total,
+}: {
+  sources: AnalyticsSourceGroup[]
+  total: number
+}) {
+  const max = Math.max(...sources.map((s) => s.visits), 0)
+  const percents = computePercentages(sources, total)
   if (max === 0) {
     return (
       <p className="px-5 py-10 text-center text-sm font-medium text-[#151515]/50">
-        Chưa có dữ liệu phiên để vẽ biểu đồ.
+        Chưa có dữ liệu lượt truy cập để vẽ biểu đồ.
       </p>
     )
   }
@@ -198,7 +200,7 @@ function SourceBarChart({ sources }: { sources: AnalyticsSourceGroup[] }) {
     <div className="flex flex-col gap-3 p-5">
       {sources.map((source) => {
         const style = SOURCE_STYLES[source.key] ?? SOURCE_STYLES.direct
-        const percent = Math.round((source.sessions / max) * 100)
+        const percent = percents[source.key] ?? 0
         return (
           <div key={source.key} className="flex items-center gap-3">
             <span className="w-32 shrink-0 truncate text-xs font-bold text-[#151515]/70 sm:w-40">
@@ -207,13 +209,50 @@ function SourceBarChart({ sources }: { sources: AnalyticsSourceGroup[] }) {
             <div className="h-6 flex-1 overflow-hidden rounded-lg border-2 border-[#151515] bg-[#F5F5F0]">
               <div
                 className={`flex h-full items-center justify-end ${style.bar} ${style.text}`}
-                style={{ width: `${Math.max(percent, source.sessions > 0 ? 4 : 0)}%` }}
+                style={{
+                  width: `${Math.max(
+                    (source.visits / max) * 100,
+                    source.visits > 0 ? 4 : 0
+                  )}%`,
+                }}
               >
                 <span className="pr-2 font-mono text-[11px] font-black">
-                  {formatNumber(source.sessions)}
+                  {formatNumber(source.visits)}
                 </span>
               </div>
             </div>
+            <span className="w-12 shrink-0 text-right font-mono text-[11px] font-bold text-[#151515]/55">
+              {percent}%
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function DailySparkline({
+  daily,
+}: {
+  daily: { date: string; visits: number }[]
+}) {
+  if (daily.length === 0) return null
+  const max = Math.max(...daily.map((d) => d.visits), 1)
+
+  return (
+    <div className="flex h-24 items-end gap-1 px-5 pb-5 pt-2">
+      {daily.map((point) => {
+        const heightPct = Math.round((point.visits / max) * 100)
+        return (
+          <div
+            key={point.date}
+            className="group relative flex-1"
+            title={`${point.date}: ${point.visits} lượt`}
+          >
+            <div
+              className="w-full rounded-t-sm border-x-2 border-t-2 border-[#151515] bg-[#1877F2] transition-all"
+              style={{ height: `${Math.max(heightPct, point.visits > 0 ? 4 : 1)}%` }}
+            />
           </div>
         )
       })}
@@ -318,6 +357,8 @@ function RealtimePanel({
 
 export default function AdminAnalyticsPage() {
   const [period, setPeriod] = useState<AnalyticsPeriod>('7d')
+  // Mặc định KHÔNG tính lượt truy cập từ localhost (dev & test).
+  const [includeLocal, setIncludeLocal] = useState(false)
   const [report, setReport] = useState<AnalyticsTrafficReport | null>(null)
   const [realtime, setRealtime] = useState<AnalyticsRealtimeReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -325,23 +366,26 @@ export default function AdminAnalyticsPage() {
   const [error, setError] = useState<string | null>(null)
   const [rtError, setRtError] = useState<string | null>(null)
 
-  const loadTraffic = useCallback(async (p: AnalyticsPeriod) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await adminApi.getAnalyticsTraffic(p)
-      setReport(data)
-    } catch (e) {
-      setReport(null)
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'Không đọc được dữ liệu truy cập từ Google Analytics.'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const loadTraffic = useCallback(
+    async (p: AnalyticsPeriod, withLocal: boolean) => {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await adminApi.getAnalyticsTraffic(p, withLocal)
+        setReport(data)
+      } catch (e) {
+        setReport(null)
+        setError(
+          e instanceof Error
+            ? e.message
+            : 'Không đọc được dữ liệu lượt truy cập.'
+        )
+      } finally {
+        setLoading(false)
+      }
+    },
+    []
+  )
 
   const loadRealtime = useCallback(async () => {
     setRtLoading(true)
@@ -362,8 +406,8 @@ export default function AdminAnalyticsPage() {
   }, [])
 
   useEffect(() => {
-    loadTraffic(period)
-  }, [period, loadTraffic])
+    loadTraffic(period, includeLocal)
+  }, [period, includeLocal, loadTraffic])
 
   useEffect(() => {
     loadRealtime()
@@ -372,12 +416,26 @@ export default function AdminAnalyticsPage() {
     return () => clearInterval(timer)
   }, [loadRealtime])
 
-  const maxSessions = useMemo(
-    () => Math.max(...(report?.sources ?? []).map((s) => s.sessions), 0),
-    [report]
-  )
+  const totalVisits = report?.totals?.totalVisits ?? 0
+  const groupedTotal = report?.totals?.groupedTotal ?? 0
+  /** Số lượt dev/test đang bị ẩn khỏi số liệu. */
+  const excludedLocalVisits = report?.totals?.excludedLocalVisits ?? 0
 
-  const hasTraffic = (report?.totals?.totalSessions ?? 0) > 0
+  const hasTraffic = totalVisits > 0
+
+  /** Tỷ lệ % của từng nhóm — tổng luôn đúng 100% (largest remainder). */
+  const percents = useMemo(() => {
+    const backend = report?.sources ?? []
+    // Ưu tiên `percent` từ backend (đã bảo đảm tổng = 100%).
+    if (backend.length > 0 && backend.every((s) => typeof s.percent === 'number')) {
+      return Object.fromEntries(backend.map((s) => [s.key, s.percent]))
+    }
+    // Fallback — tính lại tại client.
+    return computePercentages(backend, totalVisits)
+  }, [report, totalVisits])
+
+  /** Chỉ hiện cảnh báo khi thực sự lệch — bảng và tổng luôn dùng cùng nguồn. */
+  const mismatch = groupedTotal !== totalVisits
 
   return (
     <main className="flex flex-col gap-6">
@@ -385,40 +443,59 @@ export default function AdminAnalyticsPage() {
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#151515]/45">
-            Google Analytics 4
+            Thống kê nội bộ
           </p>
           <h1 className="mt-1 text-2xl font-black text-[#151515] lg:text-3xl">
             Thống kê truy cập
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-[#151515]/60">
-            Nguồn truy cập website theo Facebook, Threads, Google và Trực tiếp / Khác — dữ liệu thật từ GA4 Data API.
+            Lượt truy cập theo Facebook, Threads, Google và Trực tiếp / Khác — dữ
+            liệu tự ghi trong MongoDB, tích luỹ theo thời gian.
           </p>
         </div>
 
         {/* Period filter */}
-        <div className="flex flex-wrap gap-2">
-          {PERIODS.map((p) => {
-            const active = period === p.value
-            return (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => setPeriod(p.value)}
-                aria-pressed={active}
-                className={`rounded-xl border-[2px] border-[#151515] px-4 py-2 text-sm font-bold transition-all ${
-                  active
-                    ? 'bg-[#FDE047] text-[#151515] shadow-[3px_3px_0_#151515]'
-                    : 'bg-white text-[#151515] shadow-[2px_2px_0_#151515] hover:bg-[#F5F5F0]'
-                }`}
-              >
-                {p.label}
-              </button>
-            )
-          })}
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <div className="flex flex-wrap gap-2">
+            {PERIODS.map((p) => {
+              const active = period === p.value
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPeriod(p.value)}
+                  aria-pressed={active}
+                  className={`rounded-xl border-[2px] border-[#151515] px-4 py-2 text-sm font-bold transition-all ${
+                    active
+                      ? 'bg-[#FDE047] text-[#151515] shadow-[3px_3px_0_#151515]'
+                      : 'bg-white text-[#151515] shadow-[2px_2px_0_#151515] hover:bg-[#F5F5F0]'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Toggle lượt truy cập từ môi trường dev/test */}
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-[#151515]/70">
+            <input
+              type="checkbox"
+              checked={includeLocal}
+              onChange={(e) => setIncludeLocal(e.target.checked)}
+              className="size-4 accent-[#151515]"
+            />
+            Bao gồm lượt truy cập từ localhost (dev/test)
+            {excludedLocalVisits > 0 ? (
+              <span className="rounded-md border-2 border-[#151515] bg-[#FDE047] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#151515]">
+                {excludedLocalVisits} lượt đang bị ẩn
+              </span>
+            ) : null}
+          </label>
         </div>
       </div>
 
-      {/* Realtime (nổi bật, tách biệt rõ với lịch sử) */}
+      {/* Realtime (GA4 — bổ sung, không thay thế bảng lượt truy cập) */}
       <RealtimePanel
         data={realtime}
         loading={rtLoading}
@@ -434,7 +511,7 @@ export default function AdminAnalyticsPage() {
             <p className="text-sm font-bold text-red-700">{error}</p>
             <button
               type="button"
-              onClick={() => loadTraffic(period)}
+              onClick={() => loadTraffic(period, includeLocal)}
               className="inline-flex items-center gap-2 rounded-xl border-2 border-[#151515] bg-white px-4 py-2 text-sm font-bold text-[#151515] shadow-[3px_3px_0_#151515] transition hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0_#151515]"
             >
               <RefreshCw className="size-4" />
@@ -457,16 +534,14 @@ export default function AdminAnalyticsPage() {
           {/* Totals */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              label="Tổng người dùng"
-              value={formatNumber(report?.totals?.totalUsers ?? 0)}
-              hint="Người dùng duy nhất trong kỳ (truy vấn tổng GA4)"
+              label="Tổng lượt truy cập"
+              value={formatNumber(totalVisits)}
+              hint={
+                report?.period === 'all'
+                  ? 'Tích luỹ từ lúc bắt đầu ghi nhận'
+                  : `Lượt truy cập trong ${report?.periodLabel?.toLowerCase() ?? ''}`
+              }
               accent
-              icon={<Users className="size-5 text-[#151515]" />}
-            />
-            <MetricCard
-              label="Tổng phiên truy cập"
-              value={formatNumber(report?.totals?.totalSessions ?? 0)}
-              hint={`Lịch sử ${report?.periodLabel?.toLowerCase() ?? ''} — dữ liệu GA4 đã xử lý`}
               icon={<Activity className="size-5 text-[#151515]" />}
             />
             {(['facebook', 'threads', 'google', 'direct'] as const).map((key) => {
@@ -481,30 +556,50 @@ export default function AdminAnalyticsPage() {
                 ) : (
                   <Users className="size-5 text-[#151515]" />
                 )
+              const percent = percents[key] ?? 0
               return (
                 <MetricCard
                   key={key}
                   label={source?.label ?? key}
-                  value={formatNumber(source?.sessions ?? 0)}
-                  hint={`${formatNumber(source?.activeUsers ?? 0)} người dùng`}
+                  value={formatNumber(source?.visits ?? 0)}
+                  hint={`${percent}% tổng lượt truy cập`}
                   icon={icon}
                 />
               )
             })}
           </div>
 
+          {/* Chuỗi ngày */}
+          {report?.daily && report.daily.length > 1 ? (
+            <BrutalCard className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-[3px] border-[#151515] bg-[#FDE047] px-5 py-3">
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#151515]">
+                  <CalendarDays className="size-4" />
+                  Lượt truy cập theo ngày
+                </h2>
+                <span className="font-mono text-xs font-bold text-[#151515]/70">
+                  {report.daily[0]?.date} → {report.daily[report.daily.length - 1]?.date}
+                </span>
+              </div>
+              <DailySparkline daily={report.daily} />
+            </BrutalCard>
+          ) : null}
+
           {/* Biểu đồ so sánh */}
           <BrutalCard>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b-[3px] border-[#151515] bg-[#FDE047] px-5 py-3">
               <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#151515]">
                 <BarChart3 className="size-4" />
-                Phân bổ phiên theo nguồn
+                Phân bổ lượt truy cập theo nguồn
               </h2>
               <span className="font-mono text-xs font-bold text-[#151515]/70">
-                {report?.dateRange?.startDate} → {report?.dateRange?.endDate}
+                {report?.periodLabel}
               </span>
             </div>
-            <SourceBarChart sources={report?.sources ?? []} />
+            <SourceBarChart
+              sources={report?.sources ?? []}
+              total={totalVisits}
+            />
           </BrutalCard>
 
           {/* Bảng nguồn truy cập */}
@@ -530,7 +625,7 @@ export default function AdminAnalyticsPage() {
                   Chưa có dữ liệu truy cập
                 </p>
                 <p className="max-w-md text-sm font-medium leading-relaxed text-[#151515]/55">
-                  Google Analytics 4 chưa ghi nhận lượt truy cập nào trong khoảng thời gian
+                  Chưa có lượt truy cập nào được ghi nhận trong khoảng thời gian
                   này. Số liệu sẽ tự xuất hiện ngay khi có lượt truy cập mới.
                 </p>
               </div>
@@ -543,25 +638,18 @@ export default function AdminAnalyticsPage() {
                         Nguồn
                       </th>
                       <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wider text-[#151515]/60">
-                        Phiên
+                        Lượt truy cập
                       </th>
                       <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wider text-[#151515]/60">
-                        Người dùng
-                      </th>
-                      <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wider text-[#151515]/60">
-                        Tỉ lệ phiên
+                        Tỉ lệ
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {report?.sources.map((source) => {
-                      const style = SOURCE_STYLES[source.key] ?? SOURCE_STYLES.direct
-                      const percent =
-                        (report?.totals?.totalSessions ?? 0) > 0
-                          ? Math.round(
-                              (source.sessions / (report?.totals?.totalSessions ?? 1)) * 100
-                            )
-                          : 0
+                      const style =
+                        SOURCE_STYLES[source.key] ?? SOURCE_STYLES.direct
+                      const percent = percents[source.key] ?? 0
                       return (
                         <tr
                           key={source.key}
@@ -578,10 +666,7 @@ export default function AdminAnalyticsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right font-mono text-sm font-black text-[#151515]">
-                            {formatNumber(source.sessions)}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-sm font-bold text-[#151515]/75">
-                            {formatNumber(source.activeUsers)}
+                            {formatNumber(source.visits)}
                           </td>
                           <td className="px-4 py-3 text-right font-mono text-sm font-bold text-[#151515]/75">
                             {percent}%
@@ -596,10 +681,7 @@ export default function AdminAnalyticsPage() {
                         Tổng cộng
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-black text-[#151515]">
-                        {formatNumber(report?.totals?.totalSessions ?? 0)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-sm font-black text-[#151515]">
-                        {formatNumber(report?.totals?.totalUsers ?? 0)}
+                        {formatNumber(groupedTotal)}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm font-black text-[#151515]">
                         100%
@@ -611,56 +693,44 @@ export default function AdminAnalyticsPage() {
             )}
           </BrutalCard>
 
-          {/* Chi tiết theo sessionSourceMedium */}
-          {hasTraffic ? (
+          {/* Phân bổ theo domain — phân biệt khách thật vs dev/test */}
+          {report?.siteHosts && report.siteHosts.length > 0 ? (
             <BrutalCard className="overflow-hidden">
-              <div className="border-b-[3px] border-[#151515] bg-[#151515] px-5 py-3">
-                <h2 className="text-sm font-black uppercase tracking-wide text-white">
-                  Chi tiết theo nguồn / kênh (GA4 sessionSourceMedium)
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-[3px] border-[#151515] bg-[#FDE047] px-5 py-3">
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#151515]">
+                  <Globe className="size-4" />
+                  Lượt truy cập theo website
                 </h2>
+                <span className="font-mono text-xs font-bold text-[#151515]/70">
+                  {includeLocal ? 'Bao gồm dev/test' : 'Chỉ khách thật'}
+                </span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse text-left">
+                <table className="w-full min-w-[420px] border-collapse text-left">
                   <thead>
                     <tr className="border-b-[3px] border-[#151515] bg-[#F5F5F0]">
                       <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider text-[#151515]/60">
-                        Nguồn / kênh
+                        Website (hostname)
                       </th>
                       <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wider text-[#151515]/60">
-                        Phiên
-                      </th>
-                      <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wider text-[#151515]/60">
-                        Người dùng
+                        Lượt truy cập
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {report?.sources
-                      ?.flatMap((s) =>
-                        (s.breakdown ?? []).map((b) => ({ ...b, group: s.label }))
-                      )
-                      .sort((a, b) => b.sessions - a.sessions)
-                      .map((row) => (
-                        <tr
-                          key={`${row.group}-${row.sourceMedium}`}
-                          className="border-b border-[#151515]/10 last:border-0 hover:bg-[#FDE047]/5"
-                        >
-                          <td className="px-4 py-3">
-                            <p className="font-mono text-sm font-bold text-[#151515]">
-                              {row.sourceMedium}
-                            </p>
-                            <p className="mt-0.5 text-[11px] font-semibold text-[#151515]/45">
-                              {row.group}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-sm font-black text-[#151515]">
-                            {formatNumber(row.sessions)}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-sm font-bold text-[#151515]/75">
-                            {formatNumber(row.activeUsers)}
-                          </td>
-                        </tr>
-                      ))}
+                    {report.siteHosts.map((h) => (
+                      <tr
+                        key={h.host}
+                        className="border-b border-[#151515]/10 last:border-0"
+                      >
+                        <td className="px-4 py-3 font-mono text-xs font-bold text-[#151515]">
+                          {h.host}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-sm font-black text-[#151515]">
+                          {formatNumber(h.visits)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -671,24 +741,45 @@ export default function AdminAnalyticsPage() {
           <BrutalCard className="bg-[#F5F5F0]">
             <div className="p-5">
               <h3 className="flex items-center gap-2 text-sm font-black text-[#151515]">
-                <ExternalLink className="size-4" />
+                <Activity className="size-4" />
                 Cách đọc số liệu
               </h3>
               <ul className="mt-3 flex flex-col gap-2 text-xs font-medium leading-relaxed text-[#151515]/70">
                 <li>
-                  • <strong className="font-black text-[#151515]">Tổng người dùng</strong> là số
-                  người dùng DUY NHẤT, lấy từ một truy vấn tổng riêng của GA4 — không phải
-                  tổng của các cột nguồn (một người có thể đến từ nhiều nguồn).
+                  • <strong className="font-black text-[#151515]">Tổng lượt truy cập</strong> là
+                  số phiên ghi nhận được trong kỳ. Mỗi phiên 30 phút tính là 1 lượt.
                 </li>
                 <li>
-                  • <strong className="font-black text-[#151515]">Realtime</strong> tính trong 30
-                  phút gần nhất và chưa qua xử lý đầy đủ, nên khác (thường nhỏ hơn) số liệu
-                  lịch sử.
+                  • <strong className="font-black text-[#151515]">Tổng các nhóm nguồn</strong>{' '}
+                  luôn bằng tổng lượt truy cập (cùng một truy vấn, không cộng tay).
+                  {mismatch ? (
+                    <span className="text-red-600">
+                      {' '}
+                      ⚠ Lệch {groupedTotal - totalVisits} — cần kiểm tra dữ liệu.
+                    </span>
+                  ) : null}
                 </li>
                 <li>
-                  • <strong className="font-black text-[#151515]">Lịch sử</strong> tính theo
-                  ngày theo múi giờ của property (Asia/Saigon). Dữ liệu có thể chưa kịp được
-                  GA4 xử lý cho các lượt truy cập vừa xảy ra.
+                  • <strong className="font-black text-[#151515]">Không có số "người dùng
+                  duy nhất"</strong> — hệ thống không xác định được danh tính người
+                  dùng nên không gắn nhãn người dùng cho dữ liệu phiên.
+                </li>
+                <li>
+                  • <strong className="font-black text-[#151515]">Nguồn</strong> được xác định
+                  theo UTM hợp lệ, sau đó tới referrer; không xác định được thì tính vào
+                  Trực tiếp / Khác (kể cả ChatGPT và các nguồn khác).
+                </li>
+                {report?.firstRecordedAt ? (
+                  <li>
+                    • <strong className="font-black text-[#151515]">Bắt đầu ghi nhận</strong>:{' '}
+                    {formatTime(report.firstRecordedAt)}
+                  </li>
+                ) : null}
+                <li>
+                  • <strong className="font-black text-[#151515]">Lượt dev/test</strong>:{' '}
+                  {excludedLocalVisits > 0
+                    ? `${excludedLocalVisits} lượt truy cập từ localhost đang được ẩn khỏi số liệu (không phải khách thật).`
+                    : 'Không có lượt truy cập nào từ localhost trong kỳ này.'}
                 </li>
                 {report?.note ? <li>• {report.note}</li> : null}
               </ul>

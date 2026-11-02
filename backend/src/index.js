@@ -31,6 +31,7 @@ const paymentRoutes = require('./routes/payment');
 const notificationRoutes = require('./routes/notifications');
 const geocodeRoutes = require('./routes/geocode');
 const websiteReviewRoutes = require('./routes/website-reviews');
+const trafficRoutes = require('./routes/traffic');
 
 const app = express();
 
@@ -51,6 +52,15 @@ if (process.env.FRONTEND_URL) {
   const extraUrls = process.env.FRONTEND_URL.split(',').map(url => url.trim()).filter(Boolean);
   allowedOrigins.push(...extraUrls);
 }
+
+/**
+ * Backend có thể chạy sau một reverse proxy (VD: khi deploy lên một dịch vụ
+ * có sẵn HTTPS).
+ *
+ * Không có dòng này, `req.ip` sẽ là IP của proxy ⇒ rate limiter theo IP sẽ
+ * gộp MỌI khách truy cập vào cùng một "IP" và chặn nhầm.
+ */
+app.set('trust proxy', 1);
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -111,6 +121,8 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/website-reviews', websiteReviewRoutes);
+// Public traffic tracking — KHÔNG cần đăng nhập (khách truy cập).
+app.use('/api/traffic', trafficRoutes);
 
 // 404 handler
 app.use((req, res) => {

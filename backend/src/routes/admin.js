@@ -5,6 +5,7 @@ const revenueHelper = require('../helpers/revenueHelper');
 const reviewHelper = require('../helpers/websiteReviewHelper');
 const internalStore = require('../helpers/internalStore');
 const ga4Service = require('../services/ga4Service');
+const trafficService = require('../services/trafficService');
 
 const router = express.Router();
 
@@ -1292,31 +1293,33 @@ router.get('/reviews/stats', async (req, res, next) => {
 
 // ============================================
 // GET /api/admin/analytics/traffic
-// Website traffic by acquisition source, read live from the GA4 Data API.
-// Chỉ Admin được truy cập (đã áp dụng ở đầu router).
+// Website traffic by acquisition source, read from our OWN MongoDB store
+// (collection `traffic_visits`) — NOT from the GA4 Data API.
+//
+// Lý do đổi:
+//  • GA4 `sessionSourceMedium` không phản ánh đúng nguồn: các lượt vào từ
+//    Facebook/Threads bằng link UTM vẫn bị GA4 gán là `(direct) / (none)`,
+//    và tổng sessions của GA4 không khớp tổng các nhóm nguồn (do hàng
+//    `(not set)` trong dữ liệu intraday).
+//  • GA4 Realtime chỉ giữ 30 phút; dữ liệu tự ghi thì tích luỹ.
+//
+// Chỉ Admin được truy cập (đã áp dụng `authorize('admin')` ở đầu router).
 // ============================================
 router.get('/analytics/traffic', async (req, res, next) => {
   try {
     const { period = '7d' } = req.query;
+    // `includeLocal=1` ⇒ tính cả lượt truy cập từ localhost/dev-test.
+    // Mặc định CHỈ tính lượt từ domain thật.
+    const includeLocal = req.query.includeLocal === '1';
 
-    if (!ga4Service.isConfigured()) {
-      return res.status(503).json({
-        error:
-          'Tính năng thống kê truy cập chưa được cấu hình (thiếu GA4_PROPERTY_ID hoặc thông tin xác thực Google).',
-        code: 'GA4_NOT_CONFIGURED',
-      });
-    }
-
-    const report = await ga4Service.getTrafficReport(period);
+    const report = await trafficService.getTrafficStats(period, { includeLocal });
 
     res.json(report);
   } catch (error) {
-    // Lỗi GA4 đã được chuẩn hoá thành thông điệp thân thiện, không kèm
-    // bất kỳ thông tin credential nào.
     console.error('[admin/analytics/traffic]', error.message);
-    res.status(502).json({
-      error: error.message || 'Không đọc được dữ liệu từ Google Analytics.',
-      code: 'GA4_ERROR',
+    res.status(500).json({
+      error: error.message || 'Không đọc được dữ liệu lượt truy cập.',
+      code: 'TRAFFIC_ERROR',
     });
   }
 });

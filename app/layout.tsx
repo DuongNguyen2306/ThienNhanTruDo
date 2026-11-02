@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Be_Vietnam_Pro } from 'next/font/google'
 import { Ga4Provider } from '@/components/ga4-provider'
+import { TrafficTracker } from '@/components/traffic-tracker'
 import { allowGaOnLocalhost, resolveGaEnabled } from '@/lib/analytics'
 import { Providers } from '@/components/providers'
 import './globals.css'
@@ -59,6 +60,12 @@ export default function RootLayout({
           {children}
         </Providers>
         <Ga4Provider enabled={gaEnabled} allowLocalhost={gaAllowLocalhost} />
+        {/*
+          Tracker lượt truy cập tự ghi (MongoDB riêng).
+          Chạy SONG SONG với GA4 — GA4 giữ nguyên hoạt động, tracker này bổ
+          sung bảng thống kê nguồn truy cập tích luỹ trong Admin.
+        */}
+        <TrafficTracker />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
