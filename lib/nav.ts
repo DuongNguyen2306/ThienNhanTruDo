@@ -1,7 +1,7 @@
 import {
   BarChart3, CalendarClock, CalendarDays, Compass, FileSearch, Flag, Image as ImageIcon, KeyRound, ListChecks,
   MapPin, Megaphone, PackagePlus, ScanSearch, Settings2, ShieldCheck, UserPlus, Users2, WalletCards,
-  Activity, Bot, Layers, History, Building2, FileWarning,
+  Activity, Bot, Building2, FileWarning,
 } from 'lucide-react'
 import type { SidebarItem } from '@/components/portal-sidebar'
 
@@ -40,6 +40,5 @@ export const adminNav: SidebarItem[] = [
   { group: 'Tài chính', href: '/admin/finance', label: 'Dòng tiền VNPay', icon: WalletCards },
   { href: '/admin/finance/disputes', label: 'Tranh chấp hoàn tiền', icon: FileSearch, badge: 'beta' },
   { group: 'Hệ thống', href: '/admin/config', label: 'Cấu hình', icon: Settings2 },
-  { group: 'Minh bạch', href: '/admin/audit', label: 'Nhật ký hoạt động', icon: History },
   { href: '/admin/audit/retention', label: 'Chính sách lưu trữ', icon: ImageIcon },
 ]
