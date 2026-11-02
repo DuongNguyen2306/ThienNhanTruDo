@@ -30,6 +30,28 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Số badge "Đề xuất xử lý" = số đề xuất đang chờ duyệt, lấy động từ API.
+  // Trước đây con số này hardcode nên sidebar luôn hiện "3" dù DB không có đề xuất.
+  const [pendingProposals, setPendingProposals] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    adminApi
+      .getProposalStats()
+      .then((stats) => {
+        if (!cancelled) setPendingProposals(stats.pending ?? 0)
+      })
+      .catch(() => {
+        // Không chặn render sidebar nếu API lỗi — chỉ ẩn badge.
+        if (!cancelled) setPendingProposals(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div className="mx-auto grid max-w-[1440px] gap-6 px-5 py-8 lg:grid-cols-[260px_1fr] lg:px-10">
       <PortalSidebar
@@ -38,7 +60,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           { href: '/admin/users', label: 'Quản lý user' },
           { href: '/admin/sellers', label: 'Quản lý Seller' },
           { href: '/admin/listings', label: 'Quản lý tin đăng' },
-          { href: '/admin/account-proposals', label: 'Đề xuất xử lý', hint: 3 },
+          {
+            href: '/admin/account-proposals',
+            label: 'Đề xuất xử lý',
+            hint: pendingProposals && pendingProposals > 0 ? pendingProposals : undefined,
+          },
           { href: '/admin/finance', label: 'Báo cáo tài chính' },
           { href: '/admin/financial-overview', label: 'Financial Overview', badge: 'new' },
           { href: '/admin/finance/transactions', label: 'Giao dịch' },

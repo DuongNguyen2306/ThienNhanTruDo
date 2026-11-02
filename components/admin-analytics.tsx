@@ -24,7 +24,6 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  CalendarDays,
   Globe,
   Loader2,
   RefreshCw,
@@ -235,35 +234,6 @@ function SourceBarChart({
             <span className="w-11 shrink-0 text-right font-mono text-[11px] font-bold text-[#151515]/55">
               {percent}%
             </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function DailySparkline({
-  daily,
-}: {
-  daily: { date: string; visits: number }[]
-}) {
-  if (daily.length === 0) return null
-  const max = Math.max(...daily.map((d) => d.visits), 1)
-
-  return (
-    <div className="flex h-24 items-end gap-1 px-5 pb-5 pt-2">
-      {daily.map((point) => {
-        const heightPct = Math.round((point.visits / max) * 100)
-        return (
-          <div
-            key={point.date}
-            className="group relative flex-1"
-            title={`${point.date}: ${point.visits} lượt`}
-          >
-            <div
-              className="w-full rounded-t-sm border-x-2 border-t-2 border-[#151515] bg-[#1877F2] transition-all"
-              style={{ height: `${Math.max(heightPct, point.visits > 0 ? 4 : 1)}%` }}
-            />
           </div>
         )
       })}
@@ -577,22 +547,6 @@ export default function AdminAnalyticsPage() {
               )
             })}
           </div>
-
-          {/* Chuỗi ngày */}
-          {report?.daily && report.daily.length > 1 ? (
-            <BrutalCard className="overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b-[3px] border-[#151515] bg-[#FDE047] px-5 py-3">
-                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-[#151515]">
-                  <CalendarDays className="size-4" />
-                  Lượt truy cập theo ngày
-                </h2>
-                <span className="font-mono text-xs font-bold text-[#151515]/70">
-                  {report.daily[0]?.date} → {report.daily[report.daily.length - 1]?.date}
-                </span>
-              </div>
-              <DailySparkline daily={report.daily} />
-            </BrutalCard>
-          ) : null}
 
           {/* Biểu đồ so sánh */}
           <BrutalCard>
