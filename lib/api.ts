@@ -2276,13 +2276,57 @@ export const geocodeApi = {
     ),
 }
 
+export interface VnpayCallbackResult {
+  success: boolean
+  isValid: boolean
+  message: string
+  responseCode: string
+  txnRef: string | null
+  amount: number
+  transactionNo: string | null
+  bankCode: string | null
+  payDate: string | null
+  purpose: VnpayPurpose | null
+  retryPath: string
+  /** Params for createVnpayUrl to pay the same deposit/order again; null when not retryable. */
+  retryParams: VnpayCreateParams | null
+  status?: string
+  deposit?: { id: string; depositRef: string; status: string } | null
+  order?: { id: string; orderRef: string; packageName: string; status: string } | null
+  subscription?: { packageName: string; expiresAt: string } | null
+  walletBalance?: number | null
+}
+
+export type VnpayPurpose = 'wallet_deposit' | 'package_order'
+
+export type VnpayCreateParams =
+  | { purpose?: 'wallet_deposit'; amount?: number; depositId?: string }
+  | { purpose: 'package_order'; packageId?: string; orderId?: string }
+  | { orderId: string }
+
 // Payment API
 export const paymentApi = {
-  createPayment: (amount: number, packageId: string, description?: string) =>
-    api<{ success: boolean; paymentUrl: string; transactionId: string; amount: number }>('/api/payment/create', {
+  // VNPay: create a payment URL.
+  //   Wallet top-up: { amount } (new) or { depositId } (retry an unpaid one)
+  //   Package:       { purpose: 'package_order', packageId } (new) or { orderId } (retry)
+  createVnpayUrl: (params: VnpayCreateParams) =>
+    api<{
+      success: boolean
+      purpose: VnpayPurpose
+      paymentUrl: string
+      txnRef: string
+      deposit?: { id: string; depositRef: string; amount: number; status: string }
+      order?: { id: string; orderRef: string; packageName: string; amount: number; status: string }
+    }>('/api/payment/create-vnpay-url', {
       method: 'POST',
-      body: { amount, packageId, description },
+      body: params,
     }),
+
+  // VNPay: verify the query string VNPay appended to the return URL.
+  verifyVnpayCallback: (queryString: string) =>
+    api<VnpayCallbackResult>(
+      `/api/payment/vnpay-callback${queryString.startsWith('?') ? queryString : `?${queryString}`}`
+    ),
 
   getStatus: (txnRef: string) =>
     api<{ transaction: Transaction }>(`/api/payment/status/${txnRef}`),
@@ -2304,13 +2348,6 @@ export const paymentApi = {
   getPackages: () =>
     api<{ packages: Package[] }>('/api/payment/packages'),
 
-  // Manual bank transfer APIs
-  createOrder: (packageId: string) =>
-    api<{ success: boolean; order: any }>('/api/payment/create-order', {
-      method: 'POST',
-      body: { packageId },
-    }),
-
   getMyOrders: (params?: { page?: number; limit?: number; status?: string }) => {
     const searchParams = new URLSearchParams()
     if (params?.page) searchParams.append('page', String(params.page))
@@ -2320,19 +2357,6 @@ export const paymentApi = {
     return api<{ orders: any[]; pagination: Pagination }>(
       `/api/payment/my-orders${query ? `?${query}` : ''}`
     )
-  },
-
-  getVietQR: (orderId: string) =>
-    api<{ success: boolean; qrUrl: string; bankInfo: any; transferInfo: any }>(`/api/payment/vietqr/${orderId}`),
-
-  uploadProof: (orderId: string, file: File) => {
-    const formData = new FormData()
-    formData.append('orderId', orderId)
-    formData.append('proof', file)
-    return api<{ success: boolean; order: any }>('/api/payment/upload-proof', {
-      method: 'POST',
-      body: formData,
-    })
   },
 
   getMySubscription: () =>
@@ -2447,14 +2471,8 @@ export interface WalletDeposit {
   updatedAt: string
 }
 
+// Wallet top-ups are paid through VNPay: see paymentApi.createVnpayUrl.
 export const walletDepositApi = {
-  // Create a new deposit request
-  createDeposit: (amount: number) =>
-    api<{ success: boolean; deposit: WalletDeposit }>('/api/payment/deposit', {
-      method: 'POST',
-      body: { amount },
-    }),
-
   // Get user's deposits
   getMyDeposits: (params?: { page?: number; limit?: number; status?: string }) => {
     const searchParams = new URLSearchParams()
@@ -2470,22 +2488,6 @@ export const walletDepositApi = {
   // Get single deposit details
   getDeposit: (id: string) =>
     api<{ deposit: WalletDeposit }>(`/api/payment/deposit/${id}`),
-
-  // Get VietQR for a deposit
-  getVietQR: (id: string) =>
-    api<{ success: boolean; qrUrl: string; bankInfo: any; transferInfo: any }>(
-      `/api/payment/deposit/${id}/vietqr`
-    ),
-
-  // Submit payment proof (as base64)
-  submitProof: (id: string, proofBase64: string, proofMimeType?: string) =>
-    api<{ success: boolean; deposit: Partial<WalletDeposit> }>(
-      `/api/payment/deposit/${id}/submit-proof`,
-      {
-        method: 'POST',
-        body: { proofBase64, proofMimeType: proofMimeType || 'image/jpeg' },
-      }
-    ),
 
   // Cancel a pending deposit
   cancelDeposit: (id: string) =>

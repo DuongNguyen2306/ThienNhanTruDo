@@ -692,12 +692,15 @@ export default function ManagerPaymentReviewsPage() {
             {selectedItem.data.proofUrl && (
               <div className="mb-6">
                 <p className="mb-2 font-semibold">Minh chứng thanh toán</p>
-                {selectedItem.data.proofUrl.startsWith('data:') ? (
-                  <img
-                    src={selectedItem.data.proofUrl}
-                    alt="Payment proof"
-                    className="max-h-64 rounded-xl border-2 border-black"
-                  />
+                {selectedItem.data.proofUrl.startsWith('data:image') ||
+                selectedItem.data.proofUrl.includes('/image/upload/') ? (
+                  <a href={selectedItem.data.proofUrl} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={selectedItem.data.proofUrl}
+                      alt="Payment proof"
+                      className="max-h-64 rounded-xl border-2 border-black"
+                    />
+                  </a>
                 ) : (
                   <a
                     href={selectedItem.data.proofUrl}

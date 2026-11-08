@@ -595,32 +595,27 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 
-// Configure storage for seller uploads
+const cloudinaryService = require('../services/cloudinaryService');
+
+// Legacy local folder: only used to delete photos uploaded before the
+// switch to Cloudinary. New photos are stored on Cloudinary.
 const UPLOAD_DIR = path.join(__dirname, '../../uploads');
 
-// Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+// Files stay in memory and are streamed to Cloudinary.
+const storage = multer.memoryStorage();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const userDir = path.join(UPLOAD_DIR, req.user.id);
-    if (!fs.existsSync(userDir)) {
-      fs.mkdirSync(userDir, { recursive: true });
-    }
-    cb(null, userDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const timestamp = Date.now();
-    const randomSuffix = crypto.randomBytes(8).toString('hex');
-    cb(null, `${timestamp}-${randomSuffix}${ext}`);
-  },
-});
+const listingPhotoFolder = (userId) => cloudinaryService.buildFolder('listings', userId);
+
+// True when a stored photo URL refers to the given upload name
+// (Cloudinary URLs carry an extension, legacy local URLs may too).
+const photoMatchesName = (photoUrl, name) => {
+  if (typeof photoUrl !== 'string') return false;
+  const last = photoUrl.split(/[?#]/)[0].split('/').pop() || '';
+  return last === name || last.replace(/\.[a-zA-Z0-9]+$/, '') === name;
+};
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
   if (!allowedMimeTypes.includes(file.mimetype)) {
     return cb(new Error('Chỉ chấp nhận file ảnh (JPEG, PNG, GIF, WebP)'), false);
   }
@@ -655,56 +650,70 @@ router.post('/upload', (req, res, next) => {
     }
     next();
   });
-}, async (req, res) => {
+}, async (req, res, next) => {
   try {
     const { listingId } = req.body;
-    
-    // If listingId provided, verify ownership
+    const files = req.files || [];
+
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'Vui lòng chọn ảnh để tải lên' });
+    }
+
+    // Verify ownership before anything is sent to Cloudinary.
+    let listing = null;
     if (listingId) {
-      const listing = await prisma.listing.findUnique({
+      listing = await prisma.listing.findUnique({
         where: { id: listingId },
       });
-      
+
       if (!listing) {
-        // Clean up uploaded files
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(f => {
-            if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
-          });
-        }
         return res.status(404).json({ error: 'Không tìm thấy tin đăng' });
       }
-      
+
       if (listing.sellerId !== req.user.id) {
-        // Clean up uploaded files
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(f => {
-            if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
-          });
-        }
         return res.status(403).json({ error: 'Bạn không có quyền tải ảnh cho tin này' });
       }
-      
+    }
+
+    // Upload all photos to Cloudinary; roll back the ones that succeeded
+    // if any of them fails so no orphans are left behind.
+    const folder = listingPhotoFolder(req.user.id);
+    const results = await Promise.allSettled(
+      files.map(f => cloudinaryService.uploadMulterFile(f, { folder }))
+    );
+    const failed = results.find(r => r.status === 'rejected');
+    if (failed) {
+      await Promise.all(
+        results
+          .filter(r => r.status === 'fulfilled')
+          .map(r => cloudinaryService.deleteAsset(r.value.public_id))
+      );
+      console.error('[seller/upload] Cloudinary upload failed:', failed.reason?.message || failed.reason);
+      return res.status(502).json({ error: 'Tải ảnh lên Cloudinary thất bại, vui lòng thử lại' });
+    }
+
+    const uploadedFiles = results.map((r, i) => ({
+      url: r.value.secure_url,
+      // Last segment of the public_id; used by DELETE /upload/:filename.
+      filename: r.value.public_id.split('/').pop(),
+      publicId: r.value.public_id,
+      originalName: files[i].originalname,
+      size: r.value.bytes ?? files[i].size,
+      mimetype: files[i].mimetype,
+      width: r.value.width,
+      height: r.value.height,
+    }));
+
+    if (listing) {
       // Append new photos to existing listing
       const existingPhotos = listing.photos ? JSON.parse(listing.photos) : [];
-      const newPhotoUrls = req.files.map(f => `/uploads/${req.user.id}/${f.filename}`);
-      const updatedPhotos = [...existingPhotos, ...newPhotoUrls];
-      
+      const updatedPhotos = [...existingPhotos, ...uploadedFiles.map(f => f.url)];
+
       await prisma.listing.update({
         where: { id: listingId },
         data: { photos: JSON.stringify(updatedPhotos) },
       });
     }
-    
-    // Return uploaded file URLs with full path
-    const apiBase = resolveApiBase(req);
-    const uploadedFiles = req.files.map(f => ({
-      url: `${apiBase}/uploads/${req.user.id}/${f.filename}`,
-      filename: f.filename,
-      originalName: f.originalname,
-      size: f.size,
-      mimetype: f.mimetype,
-    }));
     
     res.json({
       success: true,
@@ -719,23 +728,21 @@ router.post('/upload', (req, res, next) => {
 // ============================================
 // DELETE /api/seller/upload/:filename - Delete a photo
 // ============================================
-router.delete('/upload/:filename', async (req, res) => {
+router.delete('/upload/:filename', async (req, res, next) => {
   try {
     const { filename } = req.params;
     const { listingId } = req.query;
-    
+
     // Security: prevent path traversal
     if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       return res.status(400).json({ error: 'Tên file không hợp lệ' });
     }
-    
-    const filePath = path.join(UPLOAD_DIR, req.user.id, filename);
-    
-    // Verify file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File không tồn tại' });
-    }
-    
+
+    // Legacy photos live on local disk; new ones on Cloudinary under the
+    // seller's own folder, so a seller can only ever delete their own assets.
+    const legacyPath = path.join(UPLOAD_DIR, req.user.id, filename);
+    const isLegacy = fs.existsSync(legacyPath);
+
     // If listingId provided, verify ownership and remove from listing
     if (listingId) {
       const listing = await prisma.listing.findUnique({
@@ -753,17 +760,24 @@ router.delete('/upload/:filename', async (req, res) => {
       
       // Remove from listing photos
       const existingPhotos = listing.photos ? JSON.parse(listing.photos) : [];
-      const updatedPhotos = existingPhotos.filter(p => !p.endsWith(filename));
-      
+      const updatedPhotos = existingPhotos.filter(p => !photoMatchesName(p, filename));
+
       await prisma.listing.update({
         where: { id: listingId },
         data: { photos: JSON.stringify(updatedPhotos) },
       });
     }
-    
-    // Delete physical file
-    fs.unlinkSync(filePath);
-    
+
+    if (isLegacy) {
+      fs.unlinkSync(legacyPath);
+    } else {
+      const publicId = `${listingPhotoFolder(req.user.id)}/${filename.replace(/\.[a-zA-Z0-9]+$/, '')}`;
+      const result = await cloudinaryService.deleteAsset(publicId);
+      if (!result || (result.result !== 'ok' && result.result !== 'not found')) {
+        return res.status(502).json({ error: 'Không thể xóa ảnh trên Cloudinary' });
+      }
+    }
+
     res.json({
       success: true,
       message: 'Đã xóa ảnh',
@@ -2049,10 +2063,21 @@ router.post('/boost/submit-proof', async (req, res, next) => {
       return res.status(400).json({ error: 'Đơn hàng đã hết hạn' });
     }
 
+    let proofUpload;
+    try {
+      proofUpload = await cloudinaryService.uploadBase64(proofBase64, proofMimeType, {
+        folder: cloudinaryService.buildFolder('payment-proofs', 'boost', req.user.id),
+        publicId: `${order.orderRef || order.id}-${Date.now()}`,
+      });
+    } catch (uploadErr) {
+      console.error('[boost/submit-proof] Cloudinary upload failed:', uploadErr.message);
+      return res.status(502).json({ error: 'Tải minh chứng lên Cloudinary thất bại, vui lòng thử lại' });
+    }
+
     const updated = await prisma.boostOrder.update({
       where: { id: orderId },
       data: {
-        proofUrl: `data:${proofMimeType || 'image/jpeg'};base64,${proofBase64}`,
+        proofUrl: proofUpload.secure_url,
         proofUploadedAt: new Date(),
         status: 'PENDING_REVIEW',
       },

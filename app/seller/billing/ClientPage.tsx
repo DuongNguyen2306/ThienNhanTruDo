@@ -47,13 +47,11 @@ export default function ClientPage() {
   const [starTransactions, setStarTransactions] = useState<StarTransaction[]>([])
   const [starFilter, setStarFilter] = useState<'all' | 'GRANT' | 'SPEND' | 'EXPIRE' | 'REFUND'>('all')
 
-  // Deposit modal state
+  // Deposit modal state (VNPay)
   const [showDepositModal, setShowDepositModal] = useState(false)
   const [depositAmount, setDepositAmount] = useState('')
-  const [currentDeposit, setCurrentDeposit] = useState<WalletDeposit | null>(null)
-  const [qrUrl, setQrUrl] = useState('')
-  const [copied, setCopied] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [payingDepositId, setPayingDepositId] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
 
   // Toast helper
@@ -152,75 +150,32 @@ export default function ClientPage() {
     }
   }
 
+  // Redirect the browser to VNPay. Pass a depositId to retry an unpaid request.
+  const startVnpayPayment = async (params: { amount?: number; depositId?: string }) => {
+    setSubmitting(true)
+    if (params.depositId) setPayingDepositId(params.depositId)
+    try {
+      const res = await paymentApi.createVnpayUrl(params)
+      if (!res.success || !res.paymentUrl) throw new Error('Không tạo được liên kết thanh toán VNPay')
+      window.location.href = res.paymentUrl
+    } catch (err: any) {
+      showToast(err.message || 'Không thể kết nối cổng thanh toán VNPay', 'error')
+      setSubmitting(false)
+      setPayingDepositId(null)
+    }
+  }
+
   const handleCreateDeposit = async () => {
     const amount = parseInt(depositAmount.replace(/[^0-9]/g, ''))
-      if (!amount || amount < 10000) {
-        showToast('Số tiền nạp tối thiểu là 10.000đ', 'warning')
-        return
-      }
-      if (amount > 100000000) {
-        showToast('Số tiền nạp tối đa là 100.000.000đ', 'warning')
-        return
-      }
-
-    setSubmitting(true)
-    try {
-      const res = await walletDepositApi.createDeposit(amount)
-      if (res.success) {
-        setCurrentDeposit(res.deposit)
-        await fetchQRCode(res.deposit.id)
-      }
-    } catch (err: any) {
-      showToast(err.message || 'Không thể tạo yêu cầu nạp tiền', 'error')
-    } finally {
-      setSubmitting(false)
+    if (!amount || amount < 10000) {
+      showToast('Số tiền nạp tối thiểu là 10.000đ', 'warning')
+      return
     }
-  }
-
-  const fetchQRCode = async (depositId: string) => {
-    try {
-      const res = await walletDepositApi.getVietQR(depositId)
-      setQrUrl(res.qrUrl)
-    } catch (err) {
-      console.error('Error fetching QR:', err)
+    if (amount > 100000000) {
+      showToast('Số tiền nạp tối đa là 100.000.000đ', 'warning')
+      return
     }
-  }
-
-  const handleSubmitProof = async () => {
-    if (!currentDeposit) return
-
-    // Create a simple file input
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-
-      setSubmitting(true)
-      try {
-        // Convert to base64
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-          const base64 = (e.target?.result as string)?.split(',')[1]
-          if (base64) {
-            await walletDepositApi.submitProof(currentDeposit.id, base64, file.type)
-            showToast('Đã gửi minh chứng thanh toán. Vui lòng chờ quản lý xác nhận.', 'success')
-            setShowDepositModal(false)
-            setCurrentDeposit(null)
-            setDepositAmount('')
-            setQrUrl('')
-            fetchData()
-          }
-        }
-        reader.readAsDataURL(file)
-      } catch (err: any) {
-        showToast(err.message || 'Lỗi khi gửi minh chứng', 'error')
-      } finally {
-        setSubmitting(false)
-      }
-    }
-    input.click()
+    await startVnpayPayment({ amount })
   }
 
   const handleCancelDeposit = async (depositId: string) => {
@@ -230,21 +185,15 @@ export default function ClientPage() {
       await walletDepositApi.cancelDeposit(depositId)
       showToast('Đã hủy yêu cầu nạp tiền', 'success')
       fetchData()
-      if (currentDeposit?.id === depositId) {
-        setShowDepositModal(false)
-        setCurrentDeposit(null)
-        setDepositAmount('')
-        setQrUrl('')
-      }
     } catch (err: any) {
       showToast(err.message || 'Lỗi khi hủy yêu cầu', 'error')
     }
   }
 
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(field)
-    setTimeout(() => setCopied(''), 2000)
+  const closeDepositModal = () => {
+    if (submitting) return
+    setShowDepositModal(false)
+    setDepositAmount('')
   }
 
   const formatMoney = (amount: number) => new Intl.NumberFormat('vi-VN').format(amount) + 'đ'
@@ -626,22 +575,23 @@ export default function ClientPage() {
                           {deposit.expiresAt && ` · Hết hạn: ${formatDate(deposit.expiresAt)}`}
                         </p>
                         <p className="text-xs text-[#151515]/60">
-                          Nội dung CK: <span className="font-mono font-bold text-[#1e40af]">{deposit.transferRef}</span>
+                          Phương thức: <span className="font-semibold text-[#1e40af]">{deposit.bankName === 'VNPay' ? 'VNPay' : 'Chuyển khoản (cũ)'}</span>
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         {deposit.status === 'PENDING' && (
                           <>
                             <button
-                              onClick={() => {
-                                setCurrentDeposit(deposit)
-                                fetchQRCode(deposit.id)
-                                setShowDepositModal(true)
-                              }}
-                              className="flex h-9 items-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] px-4 text-sm font-bold text-white shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]"
+                              onClick={() => startVnpayPayment({ depositId: deposit.id })}
+                              disabled={submitting}
+                              className="flex h-9 items-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] px-4 text-sm font-bold text-white shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515] disabled:opacity-50"
                             >
-                              <QrCode className="size-4" />
-                              Thanh toán
+                              {payingDepositId === deposit.id ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <CreditCard className="size-4" />
+                              )}
+                              Thanh toán VNPay
                             </button>
                             <button
                               onClick={() => handleCancelDeposit(deposit.id)}
@@ -836,207 +786,93 @@ export default function ClientPage() {
           <div>
             <p className="font-bold text-[#854d0e]">Thông tin thanh toán</p>
             <p className="mt-1 text-sm text-[#854d0e]/80">
-              Nạp tiền qua chuyển khoản ngân hàng. Sau khi thanh toán, vui lòng gửi minh chứng để quản lý xác nhận. Số dư ví dùng để mua gói tin đăng và các dịch vụ khác.
+              Nạp tiền trực tuyến qua cổng VNPay (ATM nội địa, thẻ quốc tế, QR ngân hàng). Số dư được cộng vào ví ngay khi thanh toán thành công và dùng để mua gói tin đăng, dịch vụ khác.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Deposit Modal */}
+      {/* Deposit Modal (VNPay) */}
       {showDepositModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#151515]/50 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border-[2px] border-[#151515] bg-white shadow-[4px_4px_0_#151515]">
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b-[2px] border-[#151515] bg-[#F5F5F0] px-5 py-4">
               <div>
-                <h3 className="text-lg font-bold text-[#151515]">
-                  {currentDeposit ? 'Thanh toán nạp tiền' : 'Nạp tiền vào ví'}
-                </h3>
-                <p className="text-xs text-[#151515]/60">
-                  {currentDeposit ? `Mã: ${currentDeposit.depositRef}` : 'Chuyển khoản ngân hàng để nạp tiền'}
-                </p>
+                <h3 className="text-lg font-bold text-[#151515]">Nạp tiền vào ví</h3>
+                <p className="text-xs text-[#151515]/60">Thanh toán an toàn qua cổng VNPay</p>
               </div>
               <button
-                onClick={() => {
-                  setShowDepositModal(false)
-                  setCurrentDeposit(null)
-                  setDepositAmount('')
-                  setQrUrl('')
-                }}
-                className="flex size-8 items-center justify-center rounded-lg hover:bg-[#151515]/10"
+                onClick={closeDepositModal}
+                disabled={submitting}
+                className="flex size-8 items-center justify-center rounded-lg hover:bg-[#151515]/10 disabled:opacity-50"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-5">
-              {/* Amount Input (if no deposit yet) */}
-              {!currentDeposit && (
-                <div className="mb-6">
-                  <label className="mb-2 block text-sm font-bold text-[#151515]">
-                    Số tiền nạp
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={depositAmount}
-                      onChange={handleAmountInput}
-                      placeholder="0"
-                      className="w-full rounded-xl border-[2px] border-[#151515] bg-white px-4 py-3 pr-12 font-mono text-2xl font-bold text-[#151515] focus:border-[#059669] focus:outline-none"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-bold text-[#151515]/60">
-                      đ
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-[#151515]/60">
-                    Tối thiểu 10.000đ - Tối đa 100.000.000đ
-                  </p>
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-bold text-[#151515]">Số tiền nạp</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={depositAmount}
+                    onChange={handleAmountInput}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateDeposit() }}
+                    placeholder="0"
+                    autoFocus
+                    className="w-full rounded-xl border-[2px] border-[#151515] bg-white px-4 py-3 pr-12 font-mono text-2xl font-bold text-[#151515] focus:border-[#059669] focus:outline-none"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg font-bold text-[#151515]/60">đ</span>
                 </div>
-              )}
+                <p className="mt-2 text-xs text-[#151515]/60">Tối thiểu 10.000đ - Tối đa 100.000.000đ</p>
+              </div>
 
-              {/* Deposit Info (if deposit exists) */}
-              {currentDeposit && (
-                <>
-                  {/* Amount Display */}
-                  <div className="mb-6 rounded-xl border-[2px] border-[#059669] bg-[#dcfce7] p-4 text-center">
-                    <p className="text-sm text-[#166534]">Số tiền nạp</p>
-                    <p className="font-mono text-3xl font-black text-[#166534]">
-                      {formatMoney(currentDeposit.amount)}
-                    </p>
-                  </div>
-
-                  {/* QR Code */}
-                  {qrUrl && (
-                    <div className="mb-6 text-center">
-                      <p className="mb-2 text-sm font-bold text-[#151515]">Quét mã QR</p>
-                      <img
-                        src={qrUrl}
-                        alt="VietQR"
-                        className="mx-auto max-w-64 rounded-xl border-[2px] border-[#151515]"
-                        onError={() => setQrUrl('')}
-                      />
-                    </div>
-                  )}
-
-                  {/* Bank Transfer Info */}
-                  <div className="mb-6 rounded-xl border-[2px] border-[#151515] bg-[#F5F5F0] p-4">
-                    <h4 className="mb-3 font-bold text-[#151515]">Chuyển khoản đến:</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-[#151515]/60">Ngân hàng:</span>
-                        <span className="font-semibold text-[#151515]">{currentDeposit.bankName}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[#151515]/60">Số TK:</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-[#151515]">{currentDeposit.accountNumber}</span>
-                          <button
-                            onClick={() => copyToClipboard(currentDeposit.accountNumber, 'account')}
-                            className="rounded bg-white px-2 py-0.5 text-xs font-semibold hover:bg-gray-100"
-                          >
-                            {copied === 'account' ? <Check className="size-3" /> : 'Copy'}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#151515]/60">Tên TK:</span>
-                        <span className="font-semibold text-[#151515]">{currentDeposit.accountHolder}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-t border-[#151515]/20 pt-2">
-                        <span className="text-[#151515]/60">Số tiền:</span>
-                        <span className="font-mono font-bold text-[#059669]">{formatMoney(currentDeposit.amount)}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-t border-[#151515]/20 pt-2">
-                        <span className="text-[#151515]/60">Nội dung CK:</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-[#1e40af]">{currentDeposit.transferRef}</span>
-                          <button
-                            onClick={() => copyToClipboard(currentDeposit.transferRef, 'ref')}
-                            className="rounded bg-white px-2 py-0.5 text-xs font-semibold hover:bg-gray-100"
-                          >
-                            {copied === 'ref' ? <Check className="size-3" /> : 'Copy'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="mt-4 rounded bg-red-100 p-2 text-xs text-red-700">
-                      ⚠️ <strong>Lưu ý:</strong> Nội dung chuyển khoản phải chính xác: <strong>{currentDeposit.transferRef}</strong>
-                    </p>
-                  </div>
-
-                  {/* Instructions */}
-                  <div className="mb-6 rounded-xl border-[2px] border-[#dbeafe] bg-[#eff6ff] p-4">
-                    <h4 className="mb-2 font-bold text-[#1e40af]">Hướng dẫn:</h4>
-                    <ol className="list-inside list-decimal space-y-1 text-sm text-[#1e40af]/80">
-                      <li>Chuyển khoản đúng số tiền <strong>{formatMoney(currentDeposit.amount)}</strong></li>
-                      <li>Ghi đúng nội dung: <strong>{currentDeposit.transferRef}</strong></li>
-                      <li>Chụp ảnh/screenshot biên lai chuyển tiền</li>
-                      <li>Ấn nút "Tôi đã chuyển khoản" bên dưới và tải lên minh chứng</li>
-                    </ol>
-                  </div>
-
-                  {/* Expiration */}
-                  <p className="mb-4 text-center text-xs text-[#151515]/60">
-                    Yêu cầu hết hạn: {formatDate(currentDeposit.expiresAt)}
-                  </p>
-                </>
-              )}
-
-              {/* Actions */}
-              <div className="space-y-3">
-                {!currentDeposit ? (
+              <div className="mb-6 grid grid-cols-3 gap-2">
+                {[50000, 100000, 200000, 500000, 1000000, 2000000].map((v) => (
                   <button
-                    onClick={handleCreateDeposit}
-                    disabled={!depositAmount || submitting}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] py-4 font-bold text-white shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
-                  >
-                    {submitting ? (
-                      <Loader2 className="size-5 animate-spin" />
-                    ) : (
-                      <>
-                        <QrCode className="size-5" />
-                        Tạo yêu cầu nạp tiền
-                      </>
+                    key={v}
+                    type="button"
+                    onClick={() => setDepositAmount(v.toLocaleString('vi-VN'))}
+                    className={cn(
+                      'rounded-lg border-[2px] px-2 py-2 font-mono text-sm font-bold transition-all',
+                      depositAmount === v.toLocaleString('vi-VN')
+                        ? 'border-[#059669] bg-[#dcfce7] text-[#166534]'
+                        : 'border-[#151515]/20 bg-white text-[#151515] hover:border-[#151515]'
                     )}
+                  >
+                    {formatMoney(v)}
                   </button>
-                ) : currentDeposit.status === 'PENDING' ? (
+                ))}
+              </div>
+
+              <div className="mb-6 rounded-xl border-[2px] border-[#dbeafe] bg-[#eff6ff] p-4 text-sm text-[#1e40af]/90">
+                <p className="mb-1 font-bold text-[#1e40af]">Cách thức thanh toán</p>
+                <ol className="list-inside list-decimal space-y-1">
+                  <li>Bấm <strong>Thanh toán qua VNPay</strong> để chuyển sang cổng VNPay</li>
+                  <li>Chọn ngân hàng / thẻ và xác nhận thanh toán</li>
+                  <li>Hệ thống tự động cộng tiền vào ví khi giao dịch thành công</li>
+                </ol>
+              </div>
+
+              <button
+                onClick={handleCreateDeposit}
+                disabled={!depositAmount || submitting}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#005BAA] py-4 font-bold text-white shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
+              >
+                {submitting ? (
                   <>
-                    <button
-                      onClick={handleSubmitProof}
-                      disabled={submitting}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] py-4 font-bold text-white shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515] disabled:opacity-50"
-                    >
-                      {submitting ? (
-                        <Loader2 className="size-5 animate-spin" />
-                      ) : (
-                        <>
-                          <Check className="size-5" />
-                          Tôi đã chuyển khoản - Gửi minh chứng
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleCancelDeposit(currentDeposit.id)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-white py-3 font-bold text-[#991b1b] shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_#151515]"
-                    >
-                      Hủy yêu cầu
-                    </button>
+                    <Loader2 className="size-5 animate-spin" />
+                    Đang chuyển sang VNPay...
                   </>
                 ) : (
-                  <button
-                    onClick={() => {
-                      setShowDepositModal(false)
-                      setCurrentDeposit(null)
-                      setDepositAmount('')
-                      setQrUrl('')
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#151515] py-4 font-bold text-white shadow-[3px_3px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[4px_4px_0_#151515]"
-                  >
-                    Đóng
-                  </button>
+                  <>
+                    <CreditCard className="size-5" />
+                    Thanh toán qua VNPay
+                  </>
                 )}
-              </div>
+              </button>
             </div>
           </div>
         </div>

@@ -7,332 +7,432 @@ const { grantStarsToUser } = require('../helpers/starHelper');
 
 const router = express.Router();
 
-// VNPay Configuration
-const VNPAY_CONFIG = {
-  vnp_TmnCode: process.env.VNPAY_TMN_CODE || 'THIENNHAN',
-  vnp_HashSecret: process.env.VNPAY_HASH_SECRET || 'THIENNHANSECRETKEY2024',
-  vnp_Url: process.env.VNPAY_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-  vnp_ApiUrl: process.env.VNPAY_API_URL || 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
-  vnp_ReturnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:3000/api/vnpay/return',
-};
+// ============================================
+// VNPay (Sandbox) — nạp tiền ví & mua gói dịch vụ
+// ============================================
+// Flow:
+//   1. FE  -> POST /api/payment/create-vnpay-url                  => { paymentUrl }
+//        nạp ví : { purpose: 'wallet_deposit', amount }   | retry: { depositId }
+//        mua gói: { purpose: 'package_order', packageId } | retry: { orderId }
+//   2. User pays on VNPay, VNPay redirects the browser to <FE>/payment/callback?vnp_...
+//   3. FE  -> GET  /api/payment/vnpay-callback?vnp_...            => verified result
+//      (VNPay can also call GET /api/payment/vnpay-ipn server-to-server; both share
+//       the same idempotent processing, so whichever arrives first wins.)
+//
+// Each payment attempt is one Transaction (method 'vnpay', vnpayTxRef = vnp_TxnRef).
+// Its idempotencyKey "vnpay:<purpose>:<targetId>" links it to what it pays for.
+const vnpayService = require('../services/vnpayService');
 
-// Create VNPay Payment URL
-router.post('/create', authenticate, async (req, res, next) => {
+const VNPAY_DEPOSIT_MIN = 10000;
+const VNPAY_DEPOSIT_MAX = 100000000;
+const VNPAY_PURPOSES = ['wallet_deposit', 'package_order'];
+
+const vnpayKey = (purpose, id) => `vnpay:${purpose}:${id}`;
+
+function parseVnpayKey(key) {
+  const m = typeof key === 'string' ? key.match(/^vnpay:([a-z_]+):(.+)$/) : null;
+  return m && VNPAY_PURPOSES.includes(m[1]) ? { purpose: m[1], targetId: m[2] } : { purpose: null, targetId: null };
+}
+
+// Send the user back to the frontend they paid from (localhost or the
+// project's Vercel domains); otherwise fall back to VNPAY_RETURN_URL.
+function isTrustedFrontendOrigin(origin) {
   try {
-    const { amount, packageId, description } = req.body;
+    const u = new URL(origin);
+    if (['localhost', '127.0.0.1'].includes(u.hostname)) return true;
+    return u.protocol === 'https:' && /^thien-nhan-tru-[a-z0-9-]+\.vercel\.app$/i.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: 'Số tiền không hợp lệ' });
+function resolveVnpayReturnUrl(req) {
+  const origin = req.headers.origin;
+  if (origin && isTrustedFrontendOrigin(origin)) {
+    return `${origin.replace(/\/+$/, '')}/payment/callback`;
+  }
+  return undefined;
+}
+
+class VnpayRequestError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// Find (retry) or create the wallet deposit a VNPay payment is for.
+async function resolveVnpayDeposit(userId, { amount, depositId }) {
+  if (depositId) {
+    const deposit = await prisma.walletDeposit.findFirst({ where: { id: depositId, userId } });
+    if (!deposit) throw new VnpayRequestError(404, 'Không tìm thấy yêu cầu nạp tiền');
+    if (deposit.status !== 'PENDING') throw new VnpayRequestError(400, 'Yêu cầu nạp tiền này không thể thanh toán lại');
+    if (new Date() > deposit.expiresAt) {
+      await prisma.walletDeposit.update({ where: { id: deposit.id }, data: { status: 'EXPIRED' } });
+      throw new VnpayRequestError(400, 'Yêu cầu nạp tiền đã hết hạn, vui lòng tạo yêu cầu mới');
+    }
+    return deposit;
+  }
+
+  const value = Math.round(Number(amount));
+  if (!Number.isFinite(value) || value < VNPAY_DEPOSIT_MIN) {
+    throw new VnpayRequestError(400, 'Số tiền nạp tối thiểu là 10.000đ');
+  }
+  if (value > VNPAY_DEPOSIT_MAX) {
+    throw new VnpayRequestError(400, 'Số tiền nạp tối đa là 100.000.000đ');
+  }
+
+  const deposit = await prisma.walletDeposit.create({
+    data: {
+      depositRef: generateDepositRef(),
+      userId,
+      amount: value,
+      // Bank snapshot fields are required by the schema; VNPay has no
+      // receiving account shown to the user.
+      bankName: 'VNPay',
+      bankBin: 'VNPAY',
+      accountNumber: '-',
+      accountHolder: 'Cổng thanh toán VNPay',
+      transferRef: generateWalletTransferRef(),
+      status: 'PENDING',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    },
+  });
+  await createAuditLog(userId, 'created', deposit.id, 'wallet_deposit', { amount: value, method: 'vnpay' });
+  return deposit;
+}
+
+// Find (retry) or create the package order a VNPay payment is for.
+async function resolveVnpayPackageOrder(user, { packageId, orderId }) {
+  if (orderId) {
+    const order = await prisma.packageOrder.findFirst({ where: { id: orderId, userId: user.id } });
+    if (!order) throw new VnpayRequestError(404, 'Không tìm thấy đơn hàng');
+    if (order.status !== 'PENDING_PAYMENT') throw new VnpayRequestError(400, 'Đơn hàng này không thể thanh toán lại');
+    if (new Date() > order.expiresAt) {
+      await prisma.packageOrder.update({ where: { id: order.id }, data: { status: 'EXPIRED' } });
+      throw new VnpayRequestError(400, 'Đơn hàng đã hết hạn, vui lòng tạo đơn mới');
+    }
+    return order;
+  }
+
+  if (!packageId) throw new VnpayRequestError(400, 'packageId là bắt buộc');
+  const packages = await getPackages();
+  const pkg = packages.find((p) => p.id === packageId);
+  if (!pkg) throw new VnpayRequestError(404, 'Gói không tồn tại');
+  if (pkg.roles && !pkg.roles.includes(user.role)) throw new VnpayRequestError(403, 'Bạn không có quyền mua gói này');
+  if (!pkg.price || pkg.price <= 0) throw new VnpayRequestError(400, 'Gói miễn phí không cần thanh toán');
+
+  const order = await prisma.packageOrder.create({
+    data: {
+      orderRef: generateOrderRef(),
+      userId: user.id,
+      userRole: user.role,
+      packageId: pkg.id,
+      packageName: pkg.name,
+      packagePrice: pkg.price,
+      packageDays: pkg.days,
+      method: 'VNPAY',
+      bankName: 'VNPay',
+      bankBin: 'VNPAY',
+      accountNumber: '-',
+      accountHolder: 'Cổng thanh toán VNPay',
+      transferRef: generateTransferRef(),
+      amount: pkg.price,
+      status: 'PENDING_PAYMENT',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    },
+  });
+  await createAuditLog(user.id, 'created', order.id, 'package_order', { packageId: pkg.id, amount: pkg.price, method: 'vnpay' });
+  return order;
+}
+
+// POST /api/payment/create-vnpay-url - Create a VNPay payment URL
+router.post('/create-vnpay-url', authenticate, async (req, res, next) => {
+  try {
+    if (!vnpayService.isConfigured()) {
+      return res.status(503).json({ error: 'Cổng VNPay chưa được cấu hình' });
     }
 
-    const transactionId = `TN${Date.now()}${Math.random().toString(36).substr(2, 5)}`.toUpperCase();
+    const body = req.body || {};
+    const purpose = body.purpose || (body.packageId || body.orderId ? 'package_order' : 'wallet_deposit');
+    if (!VNPAY_PURPOSES.includes(purpose)) {
+      return res.status(400).json({ error: 'Loại thanh toán không hợp lệ' });
+    }
 
-    // Create pending transaction
-    const transaction = await prisma.transaction.create({
+    let target;
+    let txData;
+    let orderInfo;
+    let orderType;
+    let responseTarget;
+
+    if (purpose === 'wallet_deposit') {
+      const deposit = await resolveVnpayDeposit(req.user.id, body);
+      target = deposit;
+      txData = { type: 'deposit', description: `Nạp tiền ví qua VNPay - ${deposit.depositRef}` };
+      orderInfo = `Nap tien vi Thien Nhan Tru Do ${deposit.depositRef}`;
+      orderType = 'topup';
+      responseTarget = { deposit: { id: deposit.id, depositRef: deposit.depositRef, amount: deposit.amount, status: deposit.status } };
+    } else {
+      const order = await resolveVnpayPackageOrder(req.user, body);
+      target = order;
+      txData = { type: 'payment', description: `Mua gói ${order.packageName} qua VNPay - ${order.orderRef}` };
+      orderInfo = `Thanh toan goi ${order.packageName} ${order.orderRef}`;
+      orderType = 'billpayment';
+      responseTarget = {
+        order: { id: order.id, orderRef: order.orderRef, packageName: order.packageName, amount: order.amount, status: order.status },
+      };
+    }
+
+    // One VNPay attempt = one Transaction; vnp_TxnRef links back to it.
+    const txnRef = vnpayService.generateTxnRef(purpose === 'wallet_deposit' ? 'WD' : 'PK');
+    await prisma.transaction.create({
       data: {
         userId: req.user.id,
-        type: 'payment',
-        amount: parseFloat(amount),
+        type: txData.type,
+        amount: target.amount,
         method: 'vnpay',
         status: 'pending',
-        description: description || 'Thanh toán qua VNPay',
-        vnpayTxRef: transactionId,
+        description: txData.description,
+        vnpayTxRef: txnRef,
+        idempotencyKey: vnpayKey(purpose, target.id),
       },
     });
 
-    // Build VNPay payment URL
-    const vnp_Params = {
-      vnp_Version: '2.1.0',
-      vnp_Command: 'pay',
-      vnp_TmnCode: VNPAY_CONFIG.vnp_TmnCode,
-      vnp_Amount: Math.round(parseFloat(amount) * 100), // Convert to cents
-      vnp_CurrCode: 'VND',
-      vnp_BankCode: '',
-      vnp_Locale: 'vn',
-      vnp_CustBank: '',
-      vnp_PayBank: '',
-      vnp_InvCustomer: '',
-      vnp_InvAddr: '',
-      vnp_InvEmail: req.user.email || '',
-      vnp_InvPhone: req.user.phone || '',
-      vnp_TxnRef: transactionId,
-      vnp_OrderInfo: description || 'Thanh toán Thiên Nhãn Trú Đồ',
-      vnp_OrderType: 'billpayment',
-      vnp_CreateDate: new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14),
-      vnp_ExpireDate: new Date(Date.now() + 15 * 60 * 1000).toISOString().replace(/[-:T]/g, '').slice(0, 14),
-      vnp_IpAddr: req.ip || req.connection.remoteAddress,
-      vnp_ReturnUrl: VNPAY_CONFIG.vnp_ReturnUrl,
+    const paymentUrl = vnpayService.createPaymentUrl({
+      ipAddr: req.ip,
+      amount: target.amount,
+      orderId: txnRef,
+      orderInfo,
+      orderType,
+      returnUrl: resolveVnpayReturnUrl(req),
+    });
+
+    res.json({ success: true, purpose, paymentUrl, txnRef, ...responseTarget });
+  } catch (error) {
+    if (error instanceof VnpayRequestError) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    next(error);
+  }
+});
+
+/**
+ * Apply a verified VNPay result to the database. Idempotent: the return
+ * callback and the IPN may both arrive, in any order, any number of times.
+ * @returns {Promise<{ code: string, purpose?: string|null, transaction?: object,
+ *   deposit?: object|null, order?: object|null, wallet?: object|null, subscription?: object|null }>}
+ *   code uses VNPay IPN semantics: 00 ok, 01 not found, 02 already processed, 04 bad amount.
+ */
+async function applyVnpayResult(result) {
+  const transaction = await prisma.transaction.findFirst({
+    where: { vnpayTxRef: result.orderId, method: 'vnpay' },
+  });
+  if (!transaction) return { code: '01' };
+
+  if (Math.round(transaction.amount) !== Math.round(result.amount)) {
+    console.error(`[VNPay] Amount mismatch for ${result.orderId}: expected ${transaction.amount}, got ${result.amount}`);
+    return { code: '04', transaction };
+  }
+
+  const { purpose, targetId } = parseVnpayKey(transaction.idempotencyKey);
+
+  const loadState = async (code) => {
+    const [fresh, deposit, order, wallet] = await Promise.all([
+      prisma.transaction.findUnique({ where: { id: transaction.id } }),
+      purpose === 'wallet_deposit' ? prisma.walletDeposit.findUnique({ where: { id: targetId } }) : null,
+      purpose === 'package_order' ? prisma.packageOrder.findUnique({ where: { id: targetId } }) : null,
+      prisma.sellerWallet.findUnique({ where: { userId: transaction.userId } }),
+    ]);
+    const subscription =
+      order && order.status === 'APPROVED'
+        ? await prisma.subscription.findFirst({ where: { userId: order.userId, orderId: order.id } })
+        : null;
+    return { code, purpose, transaction: fresh, deposit, order, wallet, subscription };
+  };
+
+  if (transaction.status !== 'pending') return loadState('02');
+
+  const newStatus = result.isSuccess ? 'completed' : 'failed';
+  const pkg =
+    result.isSuccess && purpose === 'package_order'
+      ? await (async () => {
+          const order = await prisma.packageOrder.findUnique({ where: { id: targetId } });
+          const packages = await getPackages();
+          return order ? packages.find((p) => p.id === order.packageId) : null;
+        })()
+      : null;
+  let fulfilled = null;
+
+  await prisma.$transaction(async (tx) => {
+    // Conditional update: only the first processor flips pending -> final.
+    const flipped = await tx.transaction.updateMany({
+      where: { id: transaction.id, status: 'pending' },
+      data: { status: newStatus, vnpayDate: result.payDate || null },
+    });
+    if (flipped.count === 0 || !result.isSuccess || !purpose) return;
+
+    const verification = {
+      reviewedAt: new Date(),
+      reviewerNote: 'Tự động xác nhận qua VNPay',
+      verifiedBankTx: result.transactionNo || result.orderId,
+      verifiedDate: new Date(),
+    };
+    const auditDetails = {
+      amount: transaction.amount,
+      txnRef: result.orderId,
+      vnpTransactionNo: result.transactionNo,
+      bankCode: result.bankCode,
     };
 
-    // Sort params and create signature
-    const sortedParams = Object.keys(vnp_Params)
-      .sort()
-      .reduce((obj, key) => {
-        if (vnp_Params[key] !== '' && vnp_Params[key] !== null && vnp_Params[key] !== undefined) {
-          obj[key] = vnp_Params[key];
-        }
-        return obj;
-      }, {});
+    if (purpose === 'wallet_deposit') {
+      const approved = await tx.walletDeposit.updateMany({
+        where: { id: targetId, status: { in: ['PENDING', 'PENDING_REVIEW'] } },
+        data: { status: 'APPROVED', ...verification },
+      });
+      if (approved.count === 0) return;
 
-    const signData = Object.keys(sortedParams)
-      .map((key) => `${key}=${sortedParams[key]}`)
-      .join('&');
+      await tx.sellerWallet.upsert({
+        where: { userId: transaction.userId },
+        create: { userId: transaction.userId, balance: transaction.amount, totalSpent: 0 },
+        update: { balance: { increment: transaction.amount } },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: transaction.userId,
+          action: 'vnpay_wallet_deposit_completed',
+          target: targetId,
+          targetType: 'wallet_deposit',
+          details: JSON.stringify(auditDetails),
+        },
+      });
+      fulfilled = { purpose };
+      return;
+    }
 
-    const vnp_SecureHash = crypto
-      .createHmac('sha512', VNPAY_CONFIG.vnp_HashSecret)
-      .update(signData)
-      .digest('hex');
+    // package_order
+    const approved = await tx.packageOrder.updateMany({
+      where: { id: targetId, status: { in: ['PENDING_PAYMENT', 'PENDING_REVIEW'] } },
+      data: { status: 'APPROVED', method: 'VNPAY', verifiedAmount: transaction.amount, ...verification },
+    });
+    if (approved.count === 0) return;
 
-    const paymentUrl = `${VNPAY_CONFIG.vnp_Url}?${signData}&vnp_SecureHash=${vnp_SecureHash}`;
+    const order = await tx.packageOrder.findUnique({ where: { id: targetId } });
+    const activation = await activatePackageSubscription(tx, order, pkg, {
+      actorId: transaction.userId,
+      auditAction: 'vnpay_package_paid',
+      auditDetails,
+      starSourceLabel: 'VNPay',
+    });
+    fulfilled = { purpose, order, ...activation };
+  });
+
+  const state = await loadState('00');
+
+  if (fulfilled?.purpose === 'wallet_deposit') {
+    await sendNotification(
+      transaction.userId,
+      'system',
+      'Nạp tiền thành công',
+      `Nạp ${transaction.amount.toLocaleString('vi-VN')}đ qua VNPay thành công. Số dư ví mới: ${(state.wallet?.balance || 0).toLocaleString('vi-VN')}đ`,
+      '/seller/billing'
+    );
+  } else if (fulfilled?.purpose === 'package_order') {
+    const starMsg = fulfilled.starGranted ? ` Bạn cũng nhận được ${fulfilled.starBatch.originalAmount} Stars!` : '';
+    await sendNotification(
+      transaction.userId,
+      'system',
+      'Thanh toán gói thành công',
+      `Thanh toán gói "${fulfilled.order.packageName}" qua VNPay thành công. Gói có hiệu lực đến ${fulfilled.subscription.expiresAt.toLocaleDateString('vi-VN')}.${starMsg}`,
+      '/tai-khoan/nang-cap'
+    );
+  }
+
+  return state;
+}
+
+// GET /api/payment/vnpay-callback - Verify the browser redirect from VNPay
+// Called by the FE page /payment/callback with VNPay's query string as-is.
+router.get('/vnpay-callback', async (req, res, next) => {
+  try {
+    const result = vnpayService.verifyPaymentReturn(req.query);
+    const base = {
+      isValid: result.isValid,
+      responseCode: result.responseCode,
+      txnRef: result.orderId,
+      amount: result.amount,
+      transactionNo: result.transactionNo,
+      bankCode: result.bankCode,
+      payDate: result.payDate,
+      purpose: null,
+      retryPath: '/seller/billing',
+      retryParams: null,
+    };
+
+    if (!result.isValid) {
+      return res.json({
+        ...base,
+        success: false,
+        message: 'Chữ ký giao dịch không hợp lệ. Dữ liệu có thể đã bị thay đổi.',
+      });
+    }
+
+    const state = await applyVnpayResult(result);
+
+    if (state.code === '01') {
+      return res.json({ ...base, success: false, message: 'Không tìm thấy giao dịch' });
+    }
+    if (state.code === '04') {
+      return res.json({ ...base, success: false, message: 'Số tiền giao dịch không khớp' });
+    }
+
+    const success = state.transaction?.status === 'completed';
+    let retryParams = null;
+    if (!success && state.deposit?.status === 'PENDING') retryParams = { depositId: state.deposit.id };
+    if (!success && state.order?.status === 'PENDING_PAYMENT') retryParams = { orderId: state.order.id };
 
     res.json({
-      success: true,
-      paymentUrl,
-      transactionId,
-      amount: parseFloat(amount),
+      ...base,
+      success,
+      message: success ? 'Thanh toán thành công' : result.message,
+      status: state.transaction?.status,
+      purpose: state.purpose,
+      retryPath: state.purpose === 'package_order' ? '/tai-khoan/nang-cap' : '/seller/billing',
+      retryParams,
+      deposit: state.deposit
+        ? { id: state.deposit.id, depositRef: state.deposit.depositRef, status: state.deposit.status }
+        : null,
+      order: state.order
+        ? { id: state.order.id, orderRef: state.order.orderRef, packageName: state.order.packageName, status: state.order.status }
+        : null,
+      subscription: state.subscription
+        ? { packageName: state.subscription.packageName, expiresAt: state.subscription.expiresAt }
+        : null,
+      walletBalance: state.wallet?.balance ?? null,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// VNPay Return Handler (browser redirect)
-// IMPORTANT: This is for UX only. Payment confirmation must rely on IPN.
-// Return URL can be spoofed by user - do not use for financial operations.
-router.get('/return', async (req, res, next) => {
+// GET /api/payment/vnpay-ipn - Server-to-server notification from VNPay
+// Must answer with { RspCode, Message } as specified by VNPay.
+router.get('/vnpay-ipn', async (req, res) => {
   try {
-    const {
-      vnp_ResponseCode,
-      vnp_TxnRef,
-      vnp_Amount,
-      vnp_TransactionStatus,
-      vnp_SecureHash,
-      vnp_TransactionNo,
-      vnp_BankCode,
-      vnp_PayDate,
-    } = req.query;
-
-    // Verify signature
-    const { vnp_SecureHash: _, ...verifyParams } = req.query;
-    const sortedParams = Object.keys(verifyParams)
-      .sort()
-      .filter((key) => key.startsWith('vnp_'))
-      .reduce((obj, key) => {
-        obj[key] = verifyParams[key];
-        return obj;
-      }, {});
-
-    const signData = Object.keys(sortedParams)
-      .map((key) => `${key}=${sortedParams[key]}`)
-      .join('&');
-
-    const expectedHash = crypto
-      .createHmac('sha512', VNPAY_CONFIG.vnp_HashSecret)
-      .update(signData)
-      .digest('hex');
-
-    if (vnp_SecureHash !== expectedHash) {
-      // Invalid signature - redirect to error
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/error?message=Invalid signature`);
-    }
-
-    // Find transaction
-    const transaction = await prisma.transaction.findFirst({
-      where: { vnpayTxRef: vnp_TxnRef },
-    });
-
-    if (!transaction) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/error?message=Transaction not found`);
-    }
-
-    // SECURITY: Idempotency check - prevent updating already completed transactions
-    if (transaction.status === 'completed' || transaction.status === 'refunded') {
-      // Transaction already finalized - just redirect to success page
-      // Do NOT update status from completed/refunded to anything else
-      console.log(`[VNPay Return] Transaction ${transaction.id} already ${transaction.status}, ignoring duplicate callback`);
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/success?txn=${vnp_TxnRef}`);
-    }
-
-    // SECURITY: Amount verification - ensure VNPay amount matches our transaction
-    if (vnp_Amount) {
-      const expectedAmount = Math.round(parseFloat(transaction.amount) * 100); // Amount we sent to VNPay
-      const receivedAmount = parseInt(vnp_Amount);
-      if (receivedAmount !== expectedAmount) {
-        console.error(`[VNPay Return] Amount mismatch for ${vnp_TxnRef}: expected ${expectedAmount}, got ${receivedAmount}`);
-        // Don't update transaction - amount mismatch could be fraud
-        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/error?message=Amount mismatch`);
-      }
-    }
-
-    // SECURITY: Also block if transaction already failed but we're getting a success
-    // This prevents race conditions between IPN and Return URL
-    if (transaction.status === 'failed' && vnp_TransactionStatus === '00') {
-      console.log(`[VNPay Return] Transaction ${transaction.id} already failed, but VNPay says success - waiting for IPN`);
-      // Don't update - let IPN handle it for authoritative status
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/pending?txn=${vnp_TxnRef}`);
-    }
-
-    // SECURITY: Also block if transaction already failed but we're getting a success
-    // This prevents race conditions between IPN and Return URL
-    if (transaction.status === 'failed' && vnp_TransactionStatus === '00') {
-      console.log(`[VNPay Return] Transaction ${transaction.id} already failed, but VNPay says success - waiting for IPN`);
-      // Don't update - let IPN handle it for authoritative status
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/pending?txn=${vnp_TxnRef}`);
-    }
-
-    // Update transaction based on VNPay status
-    const newStatus = vnp_TransactionStatus === '00' ? 'completed' : 'failed';
-
-    await prisma.transaction.update({
-      where: { id: transaction.id },
-      data: {
-        status: newStatus,
-        vnpayTxRef: vnp_TransactionNo || transaction.vnpayTxRef,
-        vnpayDate: vnp_PayDate,
-      },
-    });
-
-    // Redirect to success/failure page
-    if (newStatus === 'completed') {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/success?txn=${vnp_TxnRef}`);
-    } else {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/failed?txn=${vnp_TxnRef}`);
-    }
-  } catch (error) {
-    next(error);
-  }
-});
-
-// IPN (Instant Payment Notification) - for server-to-server
-router.post('/ipn', async (req, res, next) => {
-  try {
-    const {
-      vnp_ResponseCode,
-      vnp_TxnRef,
-      vnp_TransactionStatus,
-      vnp_SecureHash,
-      vnp_Amount,
-      vnp_TransactionNo,
-      vnp_BankCode,
-      vnp_PayDate,
-    } = req.body;
-
-    // Verify signature
-    const { vnp_SecureHash: _, ...verifyParams } = req.body;
-    const sortedParams = Object.keys(verifyParams)
-      .sort()
-      .filter((key) => key.startsWith('vnp_'))
-      .reduce((obj, key) => {
-        obj[key] = verifyParams[key];
-        return obj;
-      }, {});
-
-    const signData = Object.keys(sortedParams)
-      .map((key) => `${key}=${sortedParams[key]}`)
-      .join('&');
-
-    const expectedHash = crypto
-      .createHmac('sha512', VNPAY_CONFIG.vnp_HashSecret)
-      .update(signData)
-      .digest('hex');
-
-    if (vnp_SecureHash !== expectedHash) {
+    const result = vnpayService.verifyPaymentReturn(req.query);
+    if (!result.isValid) {
       return res.status(200).json({ RspCode: '97', Message: 'Invalid signature' });
     }
-
-    // Find transaction
-    const transaction = await prisma.transaction.findFirst({
-      where: { vnpayTxRef: vnp_TxnRef },
-    });
-
-    if (!transaction) {
-      return res.status(200).json({ RspCode: '01', Message: 'Transaction not found' });
-    }
-
-    // SECURITY: Idempotency check - prevent duplicate processing
-    if (transaction.status === 'completed' || transaction.status === 'refunded') {
-      console.log(`[VNPay IPN] Transaction ${transaction.id} already ${transaction.status}, returning success`);
-      return res.status(200).json({ RspCode: '00', Message: 'Already processed' });
-    }
-
-    // SECURITY: Amount verification - ensure VNPay amount matches our transaction
-    // VNPay sends amount in VND (not cents for VND currency)
-    const expectedAmount = Math.round(transaction.amount); // Our amount in VND
-    if (vnp_Amount && parseInt(vnp_Amount) !== expectedAmount) {
-      console.error(`[VNPay IPN] Amount mismatch for ${vnp_TxnRef}: expected ${expectedAmount}, got ${vnp_Amount}`);
-      return res.status(200).json({ RspCode: '04', Message: 'Amount mismatch' });
-    }
-
-    // Update based on status
-    const newStatus = vnp_TransactionStatus === '00' ? 'completed' : 'failed';
-
-    await prisma.transaction.update({
-      where: { id: transaction.id },
-      data: {
-        status: newStatus,
-        vnpayTxRef: vnp_TransactionNo || transaction.vnpayTxRef,
-        vnpayDate: vnp_PayDate,
-      },
-    });
-
-    // If successful, add balance to seller wallet (for deposits/payments)
-    // SECURITY: Use atomic update to prevent race condition double-crediting
-    if (newStatus === 'completed') {
-      // Check if wallet was already credited for this transaction to prevent race condition
-      // We track this by checking if the wallet already has a transaction of this amount recently
-      const existingWalletTx = await prisma.transaction.findFirst({
-        where: {
-          userId: transaction.userId,
-          id: transaction.id,
-          status: 'completed',
-          createdAt: {
-            gte: new Date(Date.now() - 60000) // Within last minute
-          }
-        }
-      });
-
-      if (!existingWalletTx) {
-        console.log(`[VNPay IPN] No recent completed transaction found for user ${transaction.userId}, skipping wallet credit`);
-      } else {
-        // Get or create wallet
-        let wallet = await prisma.sellerWallet.findUnique({
-          where: { userId: transaction.userId },
-        });
-
-        if (!wallet) {
-          wallet = await prisma.sellerWallet.create({
-            data: {
-              userId: transaction.userId,
-              balance: transaction.type === 'deposit' ? transaction.amount : 0,
-              totalSpent: transaction.type === 'payment' ? transaction.amount : 0,
-            },
-          });
-          console.log(`[VNPay IPN] Created new wallet for user ${transaction.userId}: balance=${wallet.balance}, totalSpent=${wallet.totalSpent}`);
-        } else {
-          // Use atomic increment to prevent race conditions
-          const updateData = {};
-          if (transaction.type === 'deposit') {
-            updateData.balance = { increment: transaction.amount };
-          }
-          if (transaction.type === 'payment') {
-            updateData.totalSpent = { increment: transaction.amount };
-          }
-          
-          if (Object.keys(updateData).length > 0) {
-            await prisma.sellerWallet.update({
-              where: { userId: transaction.userId },
-              data: updateData,
-            });
-            console.log(`[VNPay IPN] Updated wallet for user ${transaction.userId}:`, updateData);
-          }
-        }
-      }
-      console.log(`[VNPay IPN] Transaction ${transaction.id} completed, wallet credited`);
-    }
-
-    res.status(200).json({ RspCode: '00', Message: 'Success' });
+    const state = await applyVnpayResult(result);
+    const messages = {
+      '00': 'Confirm Success',
+      '01': 'Order not found',
+      '02': 'Order already confirmed',
+      '04': 'Invalid amount',
+    };
+    res.status(200).json({ RspCode: state.code, Message: messages[state.code] || 'Unknown' });
   } catch (error) {
-    next(error);
+    console.error('[VNPay IPN] error:', error);
+    res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
   }
 });
 
@@ -614,96 +714,9 @@ router.get('/bank-account', async (req, res, next) => {
   }
 });
 
-// ============================================
-// POST /api/payment/create-order - Create manual bank transfer order
-// ============================================
-router.post('/create-order', authenticate, async (req, res, next) => {
-  try {
-    const { packageId } = req.body;
-    const userId = req.user.id;
-    const userRole = req.user.role;
-    
-    // Validate package
-    if (!packageId) {
-      return res.status(400).json({ error: 'packageId là bắt buộc' });
-    }
-    
-    // Get packages
-    const packages = await getPackages();
-    const pkg = packages.find(p => p.id === packageId);
-    
-    if (!pkg) {
-      return res.status(404).json({ error: 'Gói không tồn tại' });
-    }
-    
-    // Validate role eligibility
-    if (pkg.roles && !pkg.roles.includes(userRole)) {
-      return res.status(403).json({ error: 'Bạn không có quyền mua gói này' });
-    }
-    
-    // Get active bank account
-    const bankAccount = await getActiveBankAccount();
-    if (!bankAccount) {
-      return res.status(503).json({ error: 'Hiện tại không hỗ trợ thanh toán chuyển khoản. Vui lòng thử lại sau.' });
-    }
-    
-    // Generate unique references
-    const orderRef = generateOrderRef();
-    const transferRef = generateTransferRef();
-    
-    // Set expiration (72 hours from now)
-    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
-    
-    // Create package order
-    const order = await prisma.packageOrder.create({
-      data: {
-        orderRef,
-        userId,
-        userRole,
-        packageId: pkg.id,
-        packageName: pkg.name,
-        packagePrice: pkg.price,
-        packageDays: pkg.days,
-        bankName: bankAccount.bankName,
-        bankBin: bankAccount.bankBin,
-        accountNumber: bankAccount.accountNumber,
-        accountHolder: bankAccount.accountHolder,
-        transferRef,
-        amount: pkg.price,
-        status: 'PENDING_PAYMENT',
-        expiresAt,
-      },
-    });
-    
-    // Log audit
-    await createAuditLog(userId, 'created', order.id, 'package_order', {
-      packageId: pkg.id,
-      amount: pkg.price,
-    });
-    
-    res.status(201).json({
-      success: true,
-      order: {
-        id: order.id,
-        orderRef: order.orderRef,
-        transferRef: order.transferRef,
-        amount: order.amount,
-        packageName: order.packageName,
-        packageDays: order.packageDays,
-        bankAccount: {
-          bankName: order.bankName,
-          bankBin: order.bankBin,
-          accountNumber: order.accountNumber,
-          accountHolder: order.accountHolder,
-        },
-        status: order.status,
-        expiresAt: order.expiresAt,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+// Package orders are created and paid through VNPay: see POST /create-vnpay-url
+// (purpose: package_order). Manual bank-transfer ordering was removed; the
+// manager review routes below are kept for orders created before the switch.
 
 // ============================================
 // POST /api/payment/purchase-wallet - Purchase package using wallet balance
@@ -911,111 +924,6 @@ router.post('/purchase-wallet', authenticate, async (req, res, next) => {
       stars: result.starGranted
         ? { granted: true, amount: result.starBatch.originalAmount }
         : { granted: false },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ============================================
-// POST /api/payment/upload-proof - Upload payment evidence
-// ============================================
-const multer = require('multer');
-const path = require('path');
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Chỉ chấp nhận file ảnh hoặc PDF'));
-    }
-  },
-});
-
-router.post('/upload-proof', authenticate, upload.single('proof'), async (req, res, next) => {
-  try {
-    const { orderId } = req.body;
-    
-    if (!orderId) {
-      return res.status(400).json({ error: 'orderId là bắt buộc' });
-    }
-    
-    if (!req.file) {
-      return res.status(400).json({ error: 'Vui lòng tải lên minh chứng thanh toán' });
-    }
-    
-    // Find order
-    const order = await prisma.packageOrder.findFirst({
-      where: {
-        id: orderId,
-        userId: req.user.id,
-      },
-    });
-    
-    if (!order) {
-      return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
-    }
-    
-    if (order.status !== 'PENDING_PAYMENT') {
-      return res.status(400).json({ error: 'Không thể tải lên minh chứng cho đơn hàng này' });
-    }
-    
-    // Check if expired
-    if (new Date() > order.expiresAt) {
-      await prisma.packageOrder.update({
-        where: { id: orderId },
-        data: { status: 'EXPIRED' },
-      });
-      return res.status(400).json({ error: 'Đơn hàng đã hết hạn' });
-    }
-    
-    // Upload to storage (simplified - in production use cloud storage)
-    const filename = `proofs/${req.user.id}/${order.orderRef}-${Date.now()}${path.extname(req.file.originalname)}`;
-    
-    // For now, store as base64 in the database (in production, use S3/GCS)
-    const proofData = req.file.buffer.toString('base64');
-    
-    const updatedOrder = await prisma.packageOrder.update({
-      where: { id: orderId },
-      data: {
-        proofUrl: `data:${req.file.mimetype};base64,${proofData}`,
-        proofUploadedAt: new Date(),
-        status: 'PENDING_REVIEW',
-      },
-    });
-    
-    // Notify managers
-    const managers = await prisma.user.findMany({
-      where: { role: 'manager' },
-      select: { id: true },
-    });
-    
-    for (const manager of managers) {
-      await sendNotification(
-        manager.id,
-        'system',
-        'Yêu cầu thanh toán mới',
-        `Người dùng ${req.user.fullName || req.user.phone} đã nộp minh chứng thanh toán cho gói "${order.packageName}" trị giá ${order.amount.toLocaleString('vi-VN')}đ`,
-        `/manager/payment-reviews`
-      );
-    }
-    
-    // Log audit
-    await createAuditLog(req.user.id, 'submitted_proof', order.id, 'package_order');
-    
-    res.json({
-      success: true,
-      message: 'Đã gửi minh chứng thanh toán',
-      order: {
-        id: updatedOrder.id,
-        orderRef: updatedOrder.orderRef,
-        status: updatedOrder.status,
-        proofUploadedAt: updatedOrder.proofUploadedAt,
-      },
     });
   } catch (error) {
     next(error);
@@ -1304,10 +1212,57 @@ router.post('/manager/approve/:id', authenticate, async (req, res, next) => {
         },
       });
       
+      const activation = await activatePackageSubscription(tx, order, pkg, {
+        actorId: managerId,
+        auditAction: 'approved_payment',
+        auditDetails: { verifiedAmount, verifiedBankTx, verifiedDate },
+        starSourceLabel: 'chuyển khoản',
+      });
+
+      return { updatedOrder, ...activation };
+    });
+
+    // Send notification to user
+    const starMsg = result.starGranted
+      ? ` Bạn cũng nhận được ${result.starBatch.originalAmount} Stars!`
+      : '';
+    await sendNotification(
+      order.userId,
+      'system',
+      'Thanh toán được duyệt',
+      `Thanh toán gói "${order.packageName}" đã được xác nhận. Gói của bạn sẽ active đến ${result.subscription.expiresAt.toLocaleDateString('vi-VN')}${starMsg}`,
+      '/tai-khoan/nang-cap'
+    );
+
+    res.json({
+      success: true,
+      message: 'Đã duyệt thanh toán và kích hoạt gói',
+      order: result.updatedOrder,
+      subscription: {
+        id: result.subscription.id,
+        packageName: result.subscription.packageName,
+        expiresAt: result.subscription.expiresAt,
+      },
+      stars: result.starGranted
+        ? { granted: true, amount: result.starBatch.originalAmount }
+        : { granted: false },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Create or extend the buyer's subscription for a paid package order, write
+ * the audit log and grant the package's Stars. Must run inside a Prisma
+ * interactive transaction (`tx`) after the order has been marked APPROVED.
+ * Shared by manual manager approval and automatic VNPay confirmation.
+ */
+async function activatePackageSubscription(tx, order, pkg, { actorId, auditAction, auditDetails, starSourceLabel }) {
       // Calculate subscription expiry
       const now = new Date();
       const expiresAt = new Date(now.getTime() + order.packageDays * 24 * 60 * 60 * 1000);
-      
+
       // Check for existing active subscription of same package
       let subscription = await tx.subscription.findFirst({
         where: {
@@ -1352,14 +1307,12 @@ router.post('/manager/approve/:id', authenticate, async (req, res, next) => {
       // Create audit log
       await tx.auditLog.create({
         data: {
-          actorId: managerId,
-          action: 'approved_payment',
+          actorId,
+          action: auditAction,
           target: order.id,
           targetType: 'package_order',
           details: JSON.stringify({
-            verifiedAmount,
-            verifiedBankTx,
-            verifiedDate,
+            ...auditDetails,
             subscriptionId: subscription.id,
           }),
         },
@@ -1399,7 +1352,7 @@ router.post('/manager/approve/:id', authenticate, async (req, res, next) => {
               type: 'GRANT',
               amount: starAlloc.stars,
               balanceAfter: starAlloc.stars,
-              description: `Nhận ${starAlloc.stars} Stars từ gói ${order.packageName} (chuyển khoản)`,
+              description: `Nhận ${starAlloc.stars} Stars từ gói ${order.packageName} (${starSourceLabel})`,
               grantBatchId: starBatch.id,
               subscriptionId: subscription.id,
             },
@@ -1408,38 +1361,8 @@ router.post('/manager/approve/:id', authenticate, async (req, res, next) => {
         }
       }
 
-      return { updatedOrder, subscription, starGranted, starBatch };
-    });
-    
-    // Send notification to user
-    const starMsg = result.starGranted
-      ? ` Bạn cũng nhận được ${result.starBatch.originalAmount} Stars!`
-      : '';
-    await sendNotification(
-      order.userId,
-      'system',
-      'Thanh toán được duyệt',
-      `Thanh toán gói "${order.packageName}" đã được xác nhận. Gói của bạn sẽ active đến ${result.subscription.expiresAt.toLocaleDateString('vi-VN')}${starMsg}`,
-      '/tai-khoan/nang-cap'
-    );
-
-    res.json({
-      success: true,
-      message: 'Đã duyệt thanh toán và kích hoạt gói',
-      order: result.updatedOrder,
-      subscription: {
-        id: result.subscription.id,
-        packageName: result.subscription.packageName,
-        expiresAt: result.subscription.expiresAt,
-      },
-      stars: result.starGranted
-        ? { granted: true, amount: result.starBatch.originalAmount }
-        : { granted: false },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+      return { subscription, starGranted, starBatch };
+}
 
 // POST /api/payment/manager/reject - Reject payment
 router.post('/manager/reject/:id', authenticate, async (req, res, next) => {
@@ -1656,83 +1579,6 @@ router.delete('/admin/bank-accounts/:id', authenticate, async (req, res, next) =
 });
 
 // ============================================
-// VietQR Generation
-// ============================================
-
-// GET /api/payment/vietqr - Generate VietQR for an order
-router.get('/vietqr/:orderId', authenticate, async (req, res, next) => {
-  try {
-    const { orderId } = req.params;
-    
-    const order = await prisma.packageOrder.findFirst({
-      where: {
-        id: orderId,
-        userId: req.user.id,
-      },
-    });
-    
-    if (!order) {
-      return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
-    }
-    
-    if (order.status !== 'PENDING_PAYMENT') {
-      return res.status(400).json({ error: 'Đơn hàng không ở trạng thái chờ thanh toán' });
-    }
-    
-    // Check expiration
-    if (new Date() > order.expiresAt) {
-      await prisma.packageOrder.update({
-        where: { id: orderId },
-        data: { status: 'EXPIRED' },
-      });
-      return res.status(400).json({ error: 'Đơn hàng đã hết hạn' });
-    }
-    
-    // Generate VietQR URL using VietQR.io API (free, no API key required)
-    const vietqrData = {
-      accountNo: order.accountNumber,
-      accountName: order.accountHolder,
-      acqId: order.bankBin,
-      amount: order.amount,
-      addInfo: order.transferRef,
-      format: 'text',
-      template: 'compact',
-    };
-    
-    // Build VietQR URL
-    const queryParams = new URLSearchParams({
-      a: order.accountNumber,
-      b: order.accountHolder,
-      i: order.bankBin,
-      am: order.amount.toString(),
-      n: order.transferRef,
-      f: 'text',
-      t: 'compact2',
-    });
-    
-    const vietqrUrl = `https://img.vietqr.io/image/${order.bankBin}-${order.accountNumber}-compact2.png?${queryParams.toString()}`;
-    
-    res.json({
-      success: true,
-      qrUrl: vietqrUrl,
-      bankInfo: {
-        bankName: order.bankName,
-        bankBin: order.bankBin,
-        accountNumber: order.accountNumber,
-        accountHolder: order.accountHolder,
-      },
-      transferInfo: {
-        amount: order.amount,
-        transferRef: order.transferRef,
-        orderRef: order.orderRef,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ============================================
 // Cron Job: Expire old orders (call daily)
 // ============================================
 
@@ -1867,95 +1713,9 @@ function generateWalletTransferRef() {
   return `WD${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
-// ============================================
-// POST /api/payment/deposit - Create wallet deposit request
-// ============================================
-router.post('/deposit', authenticate, async (req, res, next) => {
-  try {
-    const { amount } = req.body;
-    const userId = req.user.id;
-
-    // Validate amount
-    if (!amount || amount < 10000) {
-      return res.status(400).json({ error: 'Số tiền nạp tối thiểu là 10.000đ' });
-    }
-    if (amount > 100000000) { // 100M VND max
-      return res.status(400).json({ error: 'Số tiền nạp tối đa là 100.000.000đ' });
-    }
-
-    // Get active bank account
-    const bankAccount = await getActiveBankAccount();
-    if (!bankAccount) {
-      return res.status(503).json({ error: 'Hiện tại không hỗ trợ thanh toán. Vui lòng thử lại sau.' });
-    }
-
-    // Get user wallet
-    let wallet = await prisma.sellerWallet.findUnique({ where: { userId } });
-    if (!wallet) {
-      wallet = await prisma.sellerWallet.create({ data: { userId, balance: 0, totalSpent: 0 } });
-    }
-
-    // Generate references
-    const depositRef = generateDepositRef();
-    const transferRef = generateWalletTransferRef();
-
-    // Set expiration (72 hours)
-    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
-
-    // Create deposit
-    const deposit = await prisma.walletDeposit.create({
-      data: {
-        depositRef,
-        userId,
-        amount: parseFloat(amount),
-        bankName: bankAccount.bankName,
-        bankBin: bankAccount.bankBin,
-        accountNumber: bankAccount.accountNumber,
-        accountHolder: bankAccount.accountHolder,
-        transferRef,
-        status: 'PENDING',
-        expiresAt,
-      },
-    });
-
-    // Create pending transaction to show in history
-    await prisma.transaction.create({
-      data: {
-        userId,
-        type: 'deposit',
-        amount: parseFloat(amount),
-        status: 'pending',
-        description: `Yêu cầu nạp tiền ${depositRef}`,
-        method: 'bank_transfer',
-      },
-    });
-
-    // Audit log
-    await createAuditLog(userId, 'created', deposit.id, 'wallet_deposit', {
-      amount: parseFloat(amount),
-    });
-
-    res.status(201).json({
-      success: true,
-      deposit: {
-        id: deposit.id,
-        depositRef: deposit.depositRef,
-        transferRef: deposit.transferRef,
-        amount: deposit.amount,
-        bankAccount: {
-          bankName: deposit.bankName,
-          bankBin: deposit.bankBin,
-          accountNumber: deposit.accountNumber,
-          accountHolder: deposit.accountHolder,
-        },
-        status: deposit.status,
-        expiresAt: deposit.expiresAt,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+// Wallet top-ups are created and paid through VNPay: see POST /create-vnpay-url.
+// (Manual bank-transfer deposits were removed; manager review routes below
+//  are kept so requests created before the switch can still be processed.)
 
 // ============================================
 // GET /api/payment/deposits - List user's deposits
@@ -2012,161 +1772,6 @@ router.get('/deposit/:id', authenticate, async (req, res, next) => {
     }
 
     res.json({ deposit });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ============================================
-// GET /api/payment/deposit/:id/vietqr - Get VietQR for deposit
-// ============================================
-router.get('/deposit/:id/vietqr', authenticate, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const deposit = await prisma.walletDeposit.findFirst({
-      where: {
-        id,
-        userId: req.user.id,
-      },
-    });
-
-    if (!deposit) {
-      return res.status(404).json({ error: 'Không tìm thấy yêu cầu nạp tiền' });
-    }
-
-    if (deposit.status !== 'PENDING') {
-      return res.status(400).json({ error: 'Chỉ yêu cầu đang chờ mới có thể tạo QR' });
-    }
-
-    // Check expiration
-    if (new Date() > deposit.expiresAt) {
-      await prisma.walletDeposit.update({
-        where: { id },
-        data: { status: 'EXPIRED' },
-      });
-      return res.status(400).json({ error: 'Yêu cầu đã hết hạn' });
-    }
-
-    // Use configured QR image if available, otherwise generate VietQR
-    let qrUrl = '';
-    
-    // Get active bank account for qrImageUrl
-    const bankAccount = await prisma.bankAccount.findFirst({
-      where: { isActive: true },
-    });
-    
-    if (bankAccount?.qrImageUrl) {
-      // Use configured static QR image URL (admin uploaded)
-      qrUrl = bankAccount.qrImageUrl;
-    } else {
-      // Generate VietQR dynamically
-      qrUrl = `https://img.vietqr.io/image/${deposit.bankBin}-${deposit.accountNumber}-compact2.png?` +
-        `a=${deposit.amount}&` +
-        `n=${deposit.transferRef}&` +
-        `i=${deposit.bankBin}&` +
-        `b=${deposit.accountNumber}&` +
-        `f=text&` +
-        `t=compact2`;
-    }
-
-    res.json({
-      success: true,
-      qrUrl,
-      qrSource: bankAccount?.qrImageUrl ? 'configured' : 'generated',
-      bankInfo: {
-        bankName: deposit.bankName,
-        bankBin: deposit.bankBin,
-        accountNumber: deposit.accountNumber,
-        accountHolder: deposit.accountHolder,
-      },
-      transferInfo: {
-        amount: deposit.amount,
-        transferRef: deposit.transferRef,
-        depositRef: deposit.depositRef,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ============================================
-// POST /api/payment/deposit/:id/submit-proof - Submit payment proof
-// ============================================
-router.post('/deposit/:id/submit-proof', authenticate, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const deposit = await prisma.walletDeposit.findFirst({
-      where: {
-        id,
-        userId: req.user.id,
-      },
-    });
-
-    if (!deposit) {
-      return res.status(404).json({ error: 'Không tìm thấy yêu cầu nạp tiền' });
-    }
-
-    if (deposit.status !== 'PENDING') {
-      return res.status(400).json({ error: 'Không thể gửi minh chứng cho yêu cầu này' });
-    }
-
-    // Check expiration
-    if (new Date() > deposit.expiresAt) {
-      await prisma.walletDeposit.update({
-        where: { id },
-        data: { status: 'EXPIRED' },
-      });
-      return res.status(400).json({ error: 'Yêu cầu đã hết hạn' });
-    }
-
-    // Expect base64 proof image in body
-    const { proofBase64, proofMimeType } = req.body;
-
-    if (!proofBase64) {
-      return res.status(400).json({ error: 'Vui lòng cung cấp minh chứng thanh toán' });
-    }
-
-    const updated = await prisma.walletDeposit.update({
-      where: { id },
-      data: {
-        proofUrl: `data:${proofMimeType || 'image/jpeg'};base64,${proofBase64}`,
-        proofUploadedAt: new Date(),
-        status: 'PENDING_REVIEW',
-      },
-    });
-
-    // Notify managers
-    const managers = await prisma.user.findMany({
-      where: { role: 'manager' },
-      select: { id: true },
-    });
-
-    for (const manager of managers) {
-      await sendNotification(
-        manager.id,
-        'system',
-        'Yêu cầu nạp tiền mới',
-        `Người dùng ${req.user.fullName || req.user.phone} đã nộp minh chứng nạp tiền ${deposit.amount.toLocaleString('vi-VN')}đ`,
-        '/manager/payment-reviews'
-      );
-    }
-
-    // Audit log
-    await createAuditLog(req.user.id, 'submitted_proof', id, 'wallet_deposit');
-
-    res.json({
-      success: true,
-      message: 'Đã gửi minh chứng thanh toán',
-      deposit: {
-        id: updated.id,
-        depositRef: updated.depositRef,
-        status: updated.status,
-        proofUploadedAt: updated.proofUploadedAt,
-      },
-    });
   } catch (error) {
     next(error);
   }

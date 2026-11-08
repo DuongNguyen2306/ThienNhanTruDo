@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatVnd, parseVnd } from '@/lib/client-utils'
-import { paymentApi, type Package, type Transaction } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { InteractiveMap } from '@/components/InteractiveMap'
 import { getDistricts, getWardsForDistrict, getDistrictCenter, type WardData } from '@/lib/geographic-data'
@@ -435,6 +434,7 @@ function PhotoUploadItem({
   required,
   hasImage,
   imageUrl,
+  previewUrl,
   uploading,
   onUpload,
   onRemove,
@@ -444,25 +444,60 @@ function PhotoUploadItem({
   required?: boolean
   hasImage: boolean
   imageUrl?: string
+  /** Local object URL of the just-picked file; shown instantly, no network needed. */
+  previewUrl?: string
   uploading?: boolean
   onUpload?: () => void
   onRemove?: () => void
   onReplace?: () => void
 }) {
+  const MAX_RETRIES = 3
   const [imageError, setImageError] = useState(false)
+  const [retry, setRetry] = useState(0)
+  const [previewFailed, setPreviewFailed] = useState(false)
+
+  // A new image (upload / replace) must start from a clean state.
+  useEffect(() => {
+    setImageError(false)
+    setRetry(0)
+    setPreviewFailed(false)
+  }, [imageUrl, previewUrl])
+
+  const remoteSrc = imageUrl
+    ? (() => {
+        const base = getBackendUrl(imageUrl)
+        if (retry === 0) return base
+        return `${base}${base.includes('?') ? '&' : '?'}retry=${retry}`
+      })()
+    : ''
+  const src = previewUrl && !previewFailed ? previewUrl : remoteSrc
+
+  const handleError = () => {
+    if (previewUrl && !previewFailed) {
+      setPreviewFailed(true)
+      return
+    }
+    // Transient network / CDN errors right after upload: try again a few times.
+    if (retry < MAX_RETRIES) {
+      setTimeout(() => setRetry((r) => r + 1), 800 * (retry + 1))
+      return
+    }
+    setImageError(true)
+  }
 
   return (
     <div className="flex flex-col items-center justify-center">
       {hasImage ? (
         <div className="group relative w-full">
           <div className="relative flex h-28 w-full items-center justify-center overflow-hidden rounded-2xl border-[2px] border-[#059669] bg-[#dcfce7]">
-            {imageUrl && !imageError ? (
+            {src && !imageError ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img 
-                src={getBackendUrl(imageUrl)} 
-                alt={label} 
-                className="h-full w-full object-cover" 
-                onError={() => setImageError(true)}
+              <img
+                key={src}
+                src={src}
+                alt={label}
+                className="h-full w-full object-cover"
+                onError={handleError}
               />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center bg-slate-200 text-xs text-slate-500">
@@ -529,7 +564,7 @@ export function ListingWizard({ editListingId }: { editListingId?: string }) {
   const [locationConfirmed, setLocationConfirmed] = useState(false)
   const [fees, setFees] = useState<Record<string, string>>({})
   // files now stores both type and the uploaded URL
-  const [files, setFiles] = useState<{ type: string; url: string; filename?: string }[]>([])
+  const [files, setFiles] = useState<{ type: string; url: string; filename?: string; preview?: string }[]>([])
   const [uploadingType, setUploadingType] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [vacant, setVacant] = useState(true)
@@ -669,9 +704,13 @@ export function ListingWizard({ editListingId }: { editListingId?: string }) {
           
           // In edit mode: just update state, don't touch listing photos yet
           // In create mode: remove existing file of this type and add new one
+          // Local preview so the thumbnail shows instantly without
+          // re-downloading the image we just sent.
+          const preview = URL.createObjectURL(file)
           setFiles((prev) => {
             const filtered = prev.filter((f) => f.type !== type)
-            return [...filtered, { type, url: uploadedFile.url, filename: uploadedFile.filename }]
+            prev.filter((f) => f.type === type && f.preview).forEach((f) => URL.revokeObjectURL(f.preview!))
+            return [...filtered, { type, url: uploadedFile.url, filename: uploadedFile.filename, preview }]
           })
         }
       } catch (err: any) {
@@ -994,6 +1033,7 @@ export function ListingWizard({ editListingId }: { editListingId?: string }) {
                               required
                               hasImage={added}
                               imageUrl={file?.url}
+                              previewUrl={file?.preview}
                               uploading={uploadingType === type}
                               onUpload={() => handleFileUpload(type)}
                               onRemove={() => removeFile(type)}
@@ -1309,218 +1349,6 @@ export function ListingWizard({ editListingId }: { editListingId?: string }) {
               </ul>
             </div>
           </aside>
-        </div>
-      )}
-    </main>
-  )
-}
-
-// ── BillingPage ──
-export function BillingPage() {
-  const [packages, setPackages] = useState<Package[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [wallet, setWallet] = useState<{ balance: number; totalSpent: number } | null>(null)
-  const [selected, setSelected] = useState('')
-  const [checkout, setCheckout] = useState(false)
-  const [paymentUrl, setPaymentUrl] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [processing, setProcessing] = useState(false)
-  const [paid, setPaid] = useState(false)
-  const [seconds, setSeconds] = useState(900)
-  const [txnRef, setTxnRef] = useState('')
-
-  useEffect(() => {
-    Promise.all([
-      paymentApi.getPackages(),
-      paymentApi.getWallet(),
-      paymentApi.getHistory(),
-    ])
-      .then(([pkgRes, walletRes, txRes]) => {
-        setPackages(pkgRes.packages)
-        setWallet(walletRes.wallet)
-        setTransactions(txRes.transactions)
-        if (pkgRes.packages.length > 0) {
-          setSelected(pkgRes.packages[0].id)
-        }
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    if (!checkout || paid || seconds <= 0) return
-    const timer = setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000)
-    return () => clearInterval(timer)
-  }, [checkout, paid, seconds])
-
-  const time = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-  const plan = packages.find((p) => p.id === selected)
-
-  const handlePayment = async () => {
-    if (!plan) return
-    setProcessing(true)
-    try {
-      const res = await paymentApi.createPayment(plan.price, plan.id, plan.name)
-      setPaymentUrl(res.paymentUrl)
-      setTxnRef(res.transactionId)
-      setCheckout(true)
-      setSeconds(900)
-      setPaid(false)
-    } catch (err) {
-      console.error('Payment error:', err)
-      alert('Không thể tạo thanh toán. Vui lòng thử lại.')
-    } finally {
-      setProcessing(false)
-    }
-  }
-
-  const simulateWebhook = async () => {
-    setPaid(true)
-    const [walletRes, txRes] = await Promise.all([
-      paymentApi.getWallet(),
-      paymentApi.getHistory(),
-    ])
-    setWallet(walletRes.wallet)
-    setTransactions(txRes.transactions)
-  }
-
-  if (loading) {
-    return (
-      <main className="flex h-96 items-center justify-center">
-        <p className="text-slate-400">Đang tải...</p>
-      </main>
-    )
-  }
-
-  return (
-    <main className="mx-auto max-w-7xl px-5 py-10 lg:px-10">
-      <div className="mx-auto max-w-3xl text-center">
-        <Badge className="rounded-full border-amber-200 bg-amber-50 text-amber-700">Nạp tiền & mua gói tin</Badge>
-        <h1 className="mt-4 text-4xl font-bold">Bảng giá dịch vụ</h1>
-        <p className="mt-3 text-slate-500">Tin thường, Tin VIP (đẩy đầu trang), Gói xác minh tận nơi do Manager đến chụp.</p>
-      </div>
-
-      {wallet && (
-        <div className="mx-auto mt-6 max-w-3xl">
-          <Card className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
-            <CardContent className="flex items-center justify-between p-6">
-              <div>
-                <p className="text-sm opacity-80">Số dư ví</p>
-                <p className="mt-1 font-mono text-3xl font-bold">{formatVnd(wallet.balance)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm opacity-80">Đã chi tiêu</p>
-                <p className="mt-1 font-mono text-xl font-bold">{formatVnd(wallet.totalSpent)}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <div className="mx-auto mt-10 grid max-w-6xl gap-5 lg:grid-cols-3">
-        {packages.map((p) => (
-          <Card key={p.id} className={`relative flex flex-col rounded-2xl ${selected === p.id ? 'ring-2 ring-emerald-500' : ''}`}>
-            {p.popular && <Badge className="absolute -top-3 left-5 bg-emerald-600">Phổ biến</Badge>}
-            <CardHeader>
-              <CardTitle>{p.name}</CardTitle>
-              <CardDescription>{p.features.join(' · ')}</CardDescription>
-              <p className="pt-3 font-mono text-3xl font-bold">{formatVnd(p.price)}</p>
-            </CardHeader>
-            <CardContent className="flex-1">
-              {p.features.map((f) => (
-                <div key={f} className="mb-2 flex gap-2 text-sm"><Check className="text-emerald-600" />{f}</div>
-              ))}
-            </CardContent>
-            <CardFooter>
-              <Button className="w-full rounded-xl bg-emerald-600" onClick={() => { setSelected(p.id); handlePayment() }} disabled={processing}>
-                {processing ? 'Đang xử lý...' : 'Thanh toán VNPay'}
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="mx-auto mt-10 max-w-6xl rounded-2xl">
-        <CardHeader>
-          <CardTitle>Lịch sử giao dịch</CardTitle>
-          <CardDescription>Tất cả giao dịch thanh toán qua VNPay</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          {transactions.length === 0 ? (
-            <p className="py-8 text-center text-slate-400">Chưa có giao dịch nào</p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-slate-400">
-                <tr>{['Mã đơn', 'Loại', 'Số tiền', 'Cổng', 'Trạng thái', 'Ngày'].map((h) => <th key={h} className="py-2 pr-4">{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {transactions.map((t) => (
-                  <tr key={t.id} className="border-t">
-                    <td className="py-3 pr-4 font-mono text-xs">{t.vnpayTxRef || t.id.slice(0, 12)}</td>
-                    <td className="py-3 pr-4">{t.description || t.type}</td>
-                    <td className="py-3 pr-4 font-mono">{formatVnd(t.amount)}</td>
-                    <td className="py-3 pr-4">{t.method === 'vnpay' ? 'VNPay' : t.method}</td>
-                    <td className="py-3 pr-4">
-                      <Badge variant={t.status === 'completed' ? 'default' : 'outline'} className={t.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : ''}>
-                        {t.status === 'completed' ? 'Thành công' : t.status === 'pending' ? 'Đang xử lý' : 'Thất bại'}
-                      </Badge>
-                    </td>
-                    <td className="py-3 pr-4 text-slate-500">{new Date(t.createdAt).toLocaleDateString('vi-VN')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-
-      {checkout && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <Card className="w-full max-w-2xl rounded-2xl">
-            <CardHeader className="flex-row items-start justify-between border-b">
-              <div>
-                <CardTitle>Thanh toán trực tuyến VNPay</CardTitle>
-                <CardDescription>Mã VietQR động theo đơn hàng {plan?.name}</CardDescription>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setCheckout(false)}><X /></Button>
-            </CardHeader>
-            <CardContent className="grid gap-6 p-6 md:grid-cols-[1fr_220px]">
-              <div className="flex flex-col gap-4">
-                <div className={`flex items-center gap-3 rounded-xl border p-4 ${paid ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                  {paid ? <CheckCircle2 className="text-emerald-600" /> : <Clock3 className="animate-pulse text-amber-600" />}
-                  <div>
-                    <b>{paid ? 'Thanh toán thành công!' : 'Đang chờ thanh toán...'}</b>
-                    <span className="block text-xs">{paid ? 'Số dư/gói tin đã được cộng.' : `QR hết hạn sau ${time}`}</span>
-                  </div>
-                </div>
-                <div className="rounded-xl border p-4 text-sm">
-                  <div className="flex justify-between"><span>Mã đơn</span><b className="font-mono">{txnRef}</b></div>
-                  <div className="mt-2 flex justify-between"><span>{plan?.name}</span><b>{plan ? formatVnd(plan.price) : ''}</b></div>
-                </div>
-                {!paid && (
-                  <Button variant="outline" className="w-full" onClick={() => window.open(paymentUrl, '_blank')}>
-                    Mở trang thanh toán VNPay
-                  </Button>
-                )}
-                <p className="flex gap-2 text-xs text-slate-400"><Info className="size-4" /> Quét mã QR bằng app ngân hàng hoặc ví điện tử để thanh toán.</p>
-              </div>
-              <div className="flex flex-col items-center gap-3">
-                <div className="flex aspect-square w-full items-center justify-center rounded-2xl border-8 border-slate-100 bg-slate-950 text-white">
-                  <QrCode className="size-28" />
-                </div>
-                {!paid && (
-                  <Button variant="outline" size="sm" className="w-full" onClick={simulateWebhook}>
-                    Mô phỏng thanh toán thành công
-                  </Button>
-                )}
-                {paid && (
-                  <Button className="w-full bg-emerald-600" onClick={() => setCheckout(false)}>
-                    Hoàn tất
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
     </main>

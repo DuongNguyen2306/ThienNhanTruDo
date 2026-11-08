@@ -19,10 +19,8 @@ export default function PackagesPage() {
 
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'bank_transfer'>('wallet')
+  const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'vnpay'>('wallet')
   const [processing, setProcessing] = useState(false)
-  const [orderData, setOrderData] = useState<any>(null)
-  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -58,61 +56,21 @@ export default function PackagesPage() {
     setSelected(pkgId)
     // Reset payment state
     setShowPaymentModal(false)
-    setOrderData(null)
     setPaymentMethod('wallet')
   }
 
-  // Create order for bank transfer
-  const handleShowQRCode = async () => {
+  // Pay for the package directly through VNPay (redirects the browser).
+  const handleVnpayPurchase = async () => {
     if (!selectedPackage) return
-    
     setProcessing(true)
     try {
-      // Create real order on backend first
-      const res = await paymentApi.createOrder(selectedPackage.id)
-      if (res.success && res.order) {
-        setOrderData({
-          ...res.order,
-          packageName: selectedPackage.name,
-          bankAccount: {
-            bankName: 'Ngân hàng TMCP Ngoại Thương Việt Nam (Vietcombank)',
-            bankBin: '970436',
-            accountNumber: '1234567890',
-            accountHolder: 'CONG TY TNHH THIEN NHAN',
-          },
-        })
-      }
+      const res = await paymentApi.createVnpayUrl({ purpose: 'package_order', packageId: selectedPackage.id })
+      if (!res.paymentUrl) throw new Error('Không tạo được liên kết thanh toán VNPay')
+      window.location.href = res.paymentUrl
     } catch (err: any) {
-      alert(err.message || 'Không thể tạo đơn hàng')
-    } finally {
+      alert(err.message || 'Không thể kết nối cổng thanh toán VNPay')
       setProcessing(false)
     }
-  }
-
-  // Submit payment proof to backend
-  const handleSubmitProof = async () => {
-    if (!orderData) return
-
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-
-      setSubmitting(true)
-      try {
-        await paymentApi.uploadProof(orderData.id, file)
-        alert('Đã gửi minh chứng thanh toán. Vui lòng chờ quản lý xác nhận.')
-        setShowPaymentModal(false)
-        resetPaymentState()
-      } catch (err: any) {
-        alert(err.message || 'Lỗi khi gửi minh chứng')
-      } finally {
-        setSubmitting(false)
-      }
-    }
-    input.click()
   }
 
   // Purchase using wallet
@@ -133,7 +91,6 @@ export default function PackagesPage() {
   }
 
   const resetPaymentState = () => {
-    setOrderData(null)
     setPaymentMethod('wallet')
   }
 
@@ -376,7 +333,7 @@ export default function PackagesPage() {
               if (wallet && wallet.balance >= selectedPackage.price) {
                 setPaymentMethod('wallet')
               } else {
-                setPaymentMethod('bank_transfer')
+                setPaymentMethod('vnpay')
               }
               setShowPaymentModal(true)
             }}
@@ -397,7 +354,7 @@ export default function PackagesPage() {
             <ul className="mt-2 space-y-1 text-sm text-[#1e40af]/80">
               <li className="flex items-start gap-2">
                 <Check className="mt-0.5 size-3.5 shrink-0 text-[#1e40af]" />
-                Thanh toán qua ví hoặc chuyển khoản ngân hàng
+                Thanh toán qua ví hoặc trực tuyến qua cổng VNPay
               </li>
               <li className="flex items-start gap-2">
                 <Check className="mt-0.5 size-3.5 shrink-0 text-[#1e40af]" />
@@ -452,8 +409,7 @@ export default function PackagesPage() {
               </div>
 
               {/* Payment Method Selection */}
-              {!orderData && (
-                <>
+              <>
                   <h4 className="font-bold text-[#151515]">Chọn phương thức thanh toán</h4>
                   
                   {/* Wallet option */}
@@ -488,28 +444,28 @@ export default function PackagesPage() {
                     )}
                   </button>
 
-                  {/* Bank transfer option */}
+                  {/* VNPay option */}
                   <button
-                    onClick={() => setPaymentMethod('bank_transfer')}
+                    onClick={() => setPaymentMethod('vnpay')}
                     className={cn(
                       'relative flex w-full flex-col items-start rounded-xl border-[2px] p-4 text-left transition-all',
-                      paymentMethod === 'bank_transfer'
-                        ? 'border-[#1e40af] bg-[#eff6ff]'
+                      paymentMethod === 'vnpay'
+                        ? 'border-[#005BAA] bg-[#eff6ff]'
                         : 'border-[#151515]/30 hover:border-[#151515]'
                     )}
                   >
                     <div className="flex items-center gap-3 mb-2">
                       <div className={cn(
                         'size-5 rounded-full border-2 flex items-center justify-center',
-                        paymentMethod === 'bank_transfer' ? 'border-[#1e40af] bg-[#1e40af]' : 'border-gray-300'
+                        paymentMethod === 'vnpay' ? 'border-[#005BAA] bg-[#005BAA]' : 'border-gray-300'
                       )}>
-                        {paymentMethod === 'bank_transfer' && <Check className="size-3 text-white" />}
+                        {paymentMethod === 'vnpay' && <Check className="size-3 text-white" />}
                       </div>
-                      <QrCode className="size-5 text-[#1e40af]" />
-                      <span className="font-bold text-[#151515]">Chuyển khoản ngân hàng</span>
+                      <CreditCard className="size-5 text-[#005BAA]" />
+                      <span className="font-bold text-[#151515]">Thanh toán qua VNPay</span>
                     </div>
                     <p className="text-sm text-[#151515]/60">
-                      Quét QR hoặc chuyển khoản thủ công. Quản lý sẽ xác nhận khi nhận được tiền.
+                      ATM nội địa, thẻ quốc tế hoặc QR ngân hàng. Gói được kích hoạt ngay khi thanh toán thành công.
                     </p>
                   </button>
 
@@ -520,8 +476,7 @@ export default function PackagesPage() {
                         // For wallet, directly process payment
                         handleWalletPurchase()
                       } else {
-                        // For bank transfer, just show QR code
-                        handleShowQRCode()
+                        handleVnpayPurchase()
                       }
                     }}
                     disabled={processing || (paymentMethod === 'wallet' && !!wallet && wallet.balance < selectedPackage.price)}
@@ -536,107 +491,12 @@ export default function PackagesPage() {
                       </>
                     ) : (
                       <>
-                        <QrCode className="size-5" />
-                        Hiển thị mã QR
+                        <CreditCard className="size-5" />
+                        Thanh toán qua VNPay
                       </>
                     )}
                   </button>
-                </>
-              )}
-
-              {/* Bank Transfer Order Details */}
-              {orderData && paymentMethod === 'bank_transfer' && (
-                <div className="space-y-4">
-                  {/* Amount Display */}
-                  <div className="rounded-xl border-[2px] border-[#059669] bg-[#dcfce7] p-4 text-center">
-                    <p className="text-sm text-[#166534]">Số tiền cần chuyển</p>
-                    <p className="font-mono text-3xl font-black text-[#166534]">
-                      {formatMoney(orderData.amount)}
-                    </p>
-                  </div>
-
-                  {/* QR Code - Static Image */}
-                  <div className="text-center">
-                    <p className="mb-2 text-sm font-bold text-[#151515]">Quét mã QR</p>
-                    <img
-                      src="/images/payment/vnp.jpg"
-                      alt="QR Code"
-                      className="mx-auto max-w-64 rounded-xl border-[2px] border-[#151515]"
-                    />
-                  </div>
-
-                      {/* Bank Transfer Info */}
-                      <div className="rounded-xl border-[2px] border-[#151515] bg-[#F5F5F0] p-4">
-                        <h4 className="mb-3 font-bold text-[#151515]">Thông tin chuyển khoản:</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-[#151515]/60">Ngân hàng:</span>
-                            <span className="font-semibold text-[#151515]">{orderData.bankAccount?.bankName}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#151515]/60">Số TK:</span>
-                            <span className="font-mono font-bold text-[#151515]">{orderData.bankAccount?.accountNumber}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#151515]/60">Tên TK:</span>
-                            <span className="font-semibold text-[#151515]">{orderData.bankAccount?.accountHolder}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-[#151515]/20 pt-2">
-                            <span className="text-[#151515]/60">Số tiền:</span>
-                            <span className="font-mono font-bold text-[#059669]">{formatMoney(orderData.amount)}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-[#151515]/20 pt-2">
-                            <span className="text-[#151515]/60">Nội dung CK:</span>
-                            <span className="font-mono font-bold text-[#1e40af]">{orderData.transferRef}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                  {/* Instructions */}
-                  <div className="rounded-xl border-[2px] border-[#dbeafe] bg-[#eff6ff] p-4">
-                    <h4 className="mb-2 font-bold text-[#1e40af]">Hướng dẫn:</h4>
-                    <ol className="list-inside list-decimal space-y-1 text-sm text-[#1e40af]/80">
-                      <li>Quét mã QR hoặc chuyển khoản thủ công</li>
-                      <li>Nội dung: <strong>{orderData.transferRef}</strong></li>
-                      <li>Ấn nút "Tôi đã chuyển khoản" bên dưới để gửi minh chứng</li>
-                    </ol>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleSubmitProof}
-                      disabled={submitting}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#059669] py-3 font-bold text-white shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] disabled:opacity-50"
-                    >
-                      {submitting ? (
-                        <Loader2 className="size-5 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle2 className="size-5" />
-                          Tôi đã chuyển khoản
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => { setShowPaymentModal(false); resetPaymentState(); }}
-                      className="rounded-xl border-[2px] border-[#151515] bg-white px-4 py-3 font-bold text-red-600 shadow-[2px_2px_0_#151515] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px]"
-                    >
-                      Hủy
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Back to Package Selection */}
-              {orderData && (
-                <button
-                  onClick={() => { resetPaymentState(); }}
-                  className="flex w-full items-center justify-center gap-2 text-sm text-[#151515]/60 hover:text-[#151515]"
-                >
-                  ← Chọn gói khác
-                </button>
-              )}
+              </>
             </div>
           </div>
         </div>
