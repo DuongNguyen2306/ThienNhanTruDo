@@ -34,7 +34,7 @@ export function BrutalHeader() {
     const items = [
       { label: 'Trang chủ', href: '/' },
       { label: 'Tìm phòng', href: '/tim-kiem' },
-      { label: 'Đã lưu', href: '/tai-khoan/da-luu', icon: 'bookmark' },
+      { label: 'Đã lưu', href: '/da-luu', icon: 'bookmark' },
     ]
     
     // Only show "Đăng tin" for approved sellers

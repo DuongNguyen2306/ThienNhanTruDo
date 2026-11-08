@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { formatVnd } from '@/lib/data'
-import type { LeafletMouseEvent } from 'leaflet'
+import { MapBaseLayer } from '@/components/map-base-layer'
+import { MapAddressSearch } from '@/components/map-address-search'
+import type { VietmapPlace } from '@/lib/vietmap'
+import type { LeafletMouseEvent, Map as LeafletMap, Marker as LeafletMarker } from 'leaflet'
 
 // Flexible listing type for map markers
 interface MapListing {
@@ -73,6 +76,37 @@ function RealMapInner({
   const [locStatus, setLocStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
   const [locError, setLocError] = useState<string | null>(null)
   const watchId = useRef<number | null>(null)
+  // Map + searched-place pin are kept in refs (not state) so picking an
+  // address does not re-render and re-trigger FlyToSelected.
+  const mapRef = useRef<LeafletMap | null>(null)
+  const searchMarkerRef = useRef<LeafletMarker | null>(null)
+
+  const getMapFocus = () => {
+    const c = mapRef.current?.getCenter()
+    return c ? { lat: c.lat, lng: c.lng } : { lat: CENTER[0], lng: CENTER[1] }
+  }
+
+  const handleSearchPick = (place: VietmapPlace) => {
+    const map = mapRef.current
+    if (!map || !modules) return
+    const { L } = modules
+    searchMarkerRef.current?.remove()
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:30px;height:30px;background:#ef4444;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 3px 10px rgba(0,0,0,0.35);"></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 30],
+      popupAnchor: [0, -32],
+    })
+    const popup = document.createElement('div')
+    popup.style.cssText = 'font-family:var(--font-be-vietnam-pro),Arial,sans-serif;font-size:12px;max-width:220px'
+    popup.textContent = place.display
+    searchMarkerRef.current = L.marker([place.lat, place.lng], { icon, zIndexOffset: 1000 })
+      .bindPopup(popup)
+      .addTo(map)
+    map.flyTo([place.lat, place.lng], 16, { duration: 0.8 })
+    setTimeout(() => searchMarkerRef.current?.openPopup(), 850)
+  }
 
   // Guard: chỉ render khi đã mounted (client-side only)
   const [mounted, setMounted] = useState(false)
@@ -187,6 +221,23 @@ function RealMapInner({
     return null
   }
 
+  function MapRefCapture() {
+    const map = useMap()
+    mapRef.current = map
+    return null
+  }
+
+  // Zoom buttons bottom-right so the search box can take the top-left corner.
+  function ZoomBottomRight() {
+    const map = useMap()
+    useEffect(() => {
+      const control = L.control.zoom({ position: 'bottomright' })
+      control.addTo(map)
+      return () => { control.remove() }
+    }, [map])
+    return null
+  }
+
   // Fly to user pos
   function FlyToUser() {
     const map = useMap()
@@ -284,11 +335,11 @@ function RealMapInner({
   const selectedListing = listings.find((l) => l.id === selectedId)
 
   return (
-    <MapContainer center={CENTER} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={true}>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+    <div className="relative h-full w-full">
+    <MapContainer center={CENTER} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+      <MapBaseLayer useMap={useMap} TileLayer={TileLayer} />
+      <MapRefCapture />
+      <ZoomBottomRight />
 
       <FlyToSelected />
       <FlyToUser />
@@ -398,6 +449,15 @@ function RealMapInner({
         )
       })}
     </MapContainer>
+
+      {/* Rendered outside MapContainer so typing/clicking doesn't drag the map. */}
+      <MapAddressSearch
+        focus={getMapFocus}
+        onPick={handleSearchPick}
+        placeholder="Tìm khu vực, đường, địa điểm..."
+        className="absolute left-3 right-14 top-3 z-[1000] sm:right-auto sm:w-[360px]"
+      />
+    </div>
   )
 }
 
@@ -430,12 +490,6 @@ export function RealMap({
 }: RealMapProps) {
   return (
     <div className={`relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 ${height}`}>
-      {/* Badge cố định góc trên */}
-      <div className="absolute left-4 top-4 z-[1000] rounded-xl bg-white/95 px-3 py-2 text-xs font-semibold shadow-sm">
-        <span style={{ color: '#059669', marginRight: 4 }}>📍</span>
-        TP. Hồ Chí Minh · Bản đồ tương tác
-      </div>
-
       {/* Thanh chú thích cố định góc dưới */}
       <div className="absolute bottom-4 left-4 right-[70px] z-[1000] rounded-xl bg-white/95 p-3 text-xs text-slate-600 shadow-sm">
         {hint}

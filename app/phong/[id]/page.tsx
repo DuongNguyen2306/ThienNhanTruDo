@@ -16,6 +16,8 @@ import { formatVnd } from '@/lib/data'
 import { listingApi, tenantApi } from '@/lib/api'
 import { useAuth } from '@/components/auth-provider'
 import { trackEvent } from '@/lib/analytics'
+import { estimateMonthlyCost, isWaterPerPerson } from '@/lib/cost-estimate'
+import { useSavedListings } from '@/lib/saved-listings-store'
 
 // Dynamic import RealMap (Leaflet requires client-side only)
 const RealMap = dynamic(() => import('@/components/RealMap').then((m) => m.RealMap), {
@@ -106,8 +108,8 @@ export default function ListingDetailPage() {
   const [minDate, setMinDate] = useState('')
 
   // ── Save/unsave state ──────────────────────────────────────────
-  const [savedListings, setSavedListings] = useState<number[]>([])
-  const [savingId, setSavingId] = useState<number | null>(null)
+  const { isSaved: isListingSaved, toggle: toggleSaved } = useSavedListings()
+  const [savingId, setSavingId] = useState<string | number | null>(null)
 
   // Set min date after mount (client-side only)
   useEffect(() => {
@@ -199,35 +201,19 @@ export default function ListingDetailPage() {
       .catch(() => setCanReview(false))
   }, [user, id])
 
-  // Fetch saved listings when user is logged in
-  useEffect(() => {
-    if (!user) return
-    tenantApi.getSaved()
-      .then((res: any) => {
-        const ids = (res.listings || []).map((l: any) => l.id)
-        setSavedListings(ids)
-      })
-      .catch(() => {})
-  }, [user])
-
-  // Toggle save/unsave listing
+  // Toggle save/unsave listing (shared saved-state store)
   const handleToggleSave = async () => {
     if (!user) {
       alert('Vui lòng đăng nhập để lưu tin!')
       return
     }
-    if (!listing?.id) return
+    if (!listing?.id || savingId) return
     setSavingId(listing.id)
     try {
-      if (savedListings.includes(listing.id)) {
-        await tenantApi.unsaveListing(String(listing.id))
-        setSavedListings(prev => prev.filter(id => id !== listing.id))
-      } else {
-        await tenantApi.saveListing(String(listing.id))
-        setSavedListings(prev => [...prev, listing.id])
-      }
+      await toggleSaved(listing.id)
     } catch (err) {
       console.error('Save error:', err)
+      alert('Không thể cập nhật tin đã lưu. Vui lòng thử lại.')
     } finally {
       setSavingId(null)
     }
@@ -410,12 +396,9 @@ export default function ListingDetailPage() {
     )
   }
 
-  const monthlyTotal = (listing.rent ?? 0)
-    + (listing.electricity ?? 0) * 50
-    + (listing.water ?? 0)
-    + (listing.managementFee ?? 0)
-    + (listing.internet ?? 0)
-    + (listing.sanitation ?? 0)
+  const cost = estimateMonthlyCost(listing, people)
+  const monthlyTotal = cost.total
+  const waterPerPerson = isWaterPerPerson(listing.waterType)
 
   // Build photos array from API response
   const photos: any[] = (listing.photos ?? []).length > 0
@@ -485,14 +468,14 @@ export default function ListingDetailPage() {
                 onClick={handleToggleSave}
                 disabled={savingId === listing?.id}
                 className={`flex size-10 items-center justify-center rounded-xl border-[2px] border-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0_#151515] ${
-                  listing && savedListings.includes(listing.id)
+                  listing && isListingSaved(listing.id)
                     ? 'bg-red-500 text-white'
                     : 'bg-white text-[#151515]'
                 }`}
-                aria-label={listing && savedListings.includes(listing.id) ? 'Bỏ lưu tin' : 'Lưu tin'}
+                aria-label={listing && isListingSaved(listing.id) ? 'Bỏ lưu tin' : 'Lưu tin'}
               >
                 <Heart
-                  className={`size-5 ${listing && savedListings.includes(listing.id) ? 'fill-white' : ''}`}
+                  className={`size-5 ${listing && isListingSaved(listing.id) ? 'fill-white' : ''}`}
                 />
               </button>
               <button
@@ -666,7 +649,7 @@ export default function ListingDetailPage() {
                   ['Tiền thuê hàng tháng', formatVnd(listing.rent)],
                   ['Tiền cọc', `${listing.depositMonths} tháng · ${formatVnd(listing.rent * listing.depositMonths)}`],
                   ['Đơn giá điện', `${formatVnd(listing.electricity)}/kWh · ${listing.electricityType === 'state' ? 'Nhà nước' : listing.electricityType}`],
-                  ['Tiền nước', listing.waterType === 'Đầu người' ? `${formatVnd(listing.water)}/người/tháng` : `${formatVnd(listing.water)}/m³`],
+                  ['Tiền nước', waterPerPerson ? `${formatVnd(listing.water)}/người/tháng` : `${formatVnd(listing.water)}/m³`],
                   ['Internet', listing.internet === 0 ? 'Miễn phí' : formatVnd(listing.internet)],
                   ['Phí gửi xe máy', listing.parkingBike === 0 ? 'Miễn phí' : formatVnd(listing.parkingBike)],
                   ['Phí quản lý', listing.managementFee === 0 ? 'Miễn phí' : formatVnd(listing.managementFee)],
@@ -705,7 +688,13 @@ export default function ListingDetailPage() {
                 {formatVnd(monthlyTotal)}
               </p>
               <p className="mt-2 text-xs text-white/50">
-                Gồm tiền phòng + điện ước lượng {people === 1 ? '80' : '140'} kWh + nước + phí cố định.
+                Gồm tiền phòng {formatVnd(cost.rent)} + điện ~{cost.kwh} kWh × {formatVnd(cost.electricityPrice)} ={' '}
+                {formatVnd(cost.electricity)} + nước{' '}
+                {waterPerPerson
+                  ? `${formatVnd(cost.waterPrice)} × ${people} người`
+                  : `~${cost.waterM3} m³ × ${formatVnd(cost.waterPrice)}`}{' '}
+                = {formatVnd(cost.water)} + phí cố định {formatVnd(cost.fixedFees)}.
+                {cost.usedDefaults && ' (Một số đơn giá chủ nhà chưa điền, đang dùng giá tham khảo.)'}
               </p>
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-[#FDE047]/30 bg-[#FDE047]/10 px-4 py-3">
                 <ShieldCheck className="size-5 shrink-0 text-[#FDE047]" />
@@ -722,7 +711,7 @@ export default function ListingDetailPage() {
                   🗺️ Vị trí phòng
                 </h2>
                 <a
-                  href={`https://www.openstreetmap.org/?mlat=${listing.lat}&mlon=${listing.lng}&zoom=17`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${listing.lat},${listing.lng}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 rounded-xl border-[2px] border-[#151515] bg-[#FDE047] px-4 py-2 text-sm font-bold text-[#151515] shadow-[2px_2px_0_#151515] transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0_#151515]"

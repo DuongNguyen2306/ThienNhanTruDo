@@ -187,6 +187,13 @@ export const ROLE_PREFIX: Record<Role, string[]> = {
   admin: ['/admin'],
 }
 
+/** Trang chỉ cần đăng nhập, mọi role đều vào được (cho middleware). */
+export const AUTH_ONLY_PATHS = ['/da-luu']
+
+export function isAuthOnlyPath(pathname: string): boolean {
+  return AUTH_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
 /** Quyết định role yêu cầu cho một pathname (cho middleware) */
 export function roleForPath(pathname: string): Role | null {
   if (pathname === '/tai-khoan' || pathname.startsWith('/tai-khoan/')) return 'tenant'

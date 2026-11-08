@@ -23,7 +23,15 @@ const RealMap = dynamic(() => import('@/components/RealMap').then((m) => m.RealM
   ),
 })
 
-const ROOM_TYPES = ['Phòng trọ', 'Chung cư mini', 'Căn hộ dịch vụ', 'Ký túc xá']
+// `value` must match the backend enum (listings.js: phong-tro | chung-cu-mini | nha-tro | can-ho).
+const ROOM_TYPES = [
+  { value: 'phong-tro', label: 'Phòng trọ' },
+  { value: 'chung-cu-mini', label: 'Chung cư mini' },
+  { value: 'nha-tro', label: 'Nhà trọ' },
+  { value: 'can-ho', label: 'Căn hộ' },
+] as const
+
+const roomTypeLabel = (value?: string) => ROOM_TYPES.find((t) => t.value === value)?.label ?? value ?? ''
 
 const SORT_OPTIONS = [
   { value: 'default', label: 'Mặc định' },
@@ -70,15 +78,19 @@ export default function SearchPage() {
   const [totalPages, setTotalPages] = useState(1)
   
   const ITEMS_PER_PAGE = 9
+  const API_PAGE_SIZE = 50 // backend max
+  const MAX_API_PAGES = 10 // up to 500 listings per search
 
   // Fetch listings from API
   const fetchListings = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      // Pagination is done client-side (after the amenity / multi-type filters
+      // and VIP-first ordering), so fetch every matching listing here, not
+      // just the current page. Backend caps `limit` at 50.
       const params: Record<string, string | number | boolean | undefined> = {
-        page: currentPage,
-        limit: ITEMS_PER_PAGE * 5, // Fetch more for client-side filtering
+        limit: API_PAGE_SIZE,
         status: 'active',
       }
       
@@ -87,16 +99,31 @@ export default function SearchPage() {
       if (priceMax) params.maxRent = parseInt(priceMax.replace(/\D/g, ''))
       if (areaMin) params.minArea = parseInt(areaMin)
       if (areaMax) params.maxArea = parseInt(areaMax)
-      if (selectedTypes.length > 0) params.roomType = selectedTypes[0]
+      // API filters one type; with several selected, filter client-side below.
+      if (selectedTypes.length === 1) params.roomType = selectedTypes[0]
       if (verifiedOnly) params.verified = true
       if (vacantOnly) params.vacantNow = true
       if (sortBy === 'price_asc') { params.sortBy = 'rent'; params.sortOrder = 'asc' }
       if (sortBy === 'price_desc') { params.sortBy = 'rent'; params.sortOrder = 'desc' }
       if (sortBy === 'newest') { params.sortBy = 'createdAt'; params.sortOrder = 'desc' }
 
-      const data = await listingApi.search(params as any)
-      setListings(data.listings ?? [])
-      setTotalCount(data.pagination?.total ?? data.listings?.length ?? 0)
+      const first = await listingApi.search({ ...params, page: 1 } as any)
+      let all: ApiListing[] = first.listings ?? []
+      const apiPages = Math.min(first.pagination?.totalPages ?? 1, MAX_API_PAGES)
+      if (apiPages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: apiPages - 1 }, (_, i) => listingApi.search({ ...params, page: i + 2 } as any))
+        )
+        const seen = new Set(all.map((l) => l.id))
+        for (const page of rest) {
+          for (const l of page.listings ?? []) {
+            if (!seen.has(l.id)) { seen.add(l.id); all.push(l) }
+          }
+        }
+      }
+      const data = { listings: all, pagination: first.pagination }
+      setListings(all)
+      setTotalCount(data.pagination?.total ?? all.length)
       // GA4: ghi nhan tu khoa tim kiem + so ket qua (khong gui PII).
       // Chi ban khi co tu khoa that, tranh spam event khi doi bo loc.
       if (searchQuery.trim()) {
@@ -118,7 +145,12 @@ export default function SearchPage() {
     } finally {
       setLoading(false)
     }
-  }, [searchQuery, selectedTypes, priceMin, priceMax, areaMin, areaMax, verifiedOnly, vacantOnly, sortBy, currentPage])
+  }, [searchQuery, selectedTypes, priceMin, priceMax, areaMin, areaMax, verifiedOnly, vacantOnly, sortBy])
+
+  // Any filter/sort change starts again from page 1.
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, selectedTypes, priceMin, priceMax, areaMin, areaMax, verifiedOnly, vacantOnly, sortBy, selectedAmenities])
 
   useEffect(() => {
     fetchListings()
@@ -126,6 +158,7 @@ export default function SearchPage() {
 
   // Client-side additional filtering (for amenities not in API)
   const filteredListings = listings.filter((l) => {
+    if (selectedTypes.length > 1 && !selectedTypes.includes(String(l.roomType))) return false
     // Amenities filter
     if (selectedAmenities.includes('pets') && !l.pets) return false
     if (selectedAmenities.includes('furniture') && !l.furniture) return false
@@ -266,16 +299,16 @@ export default function SearchPage() {
                 <div className="flex flex-col gap-2">
                   {ROOM_TYPES.map((type) => (
                     <label
-                      key={type}
+                      key={type.value}
                       className="flex cursor-pointer items-center gap-2"
                     >
                       <input
                         type="checkbox"
-                        checked={selectedTypes.includes(type)}
-                        onChange={() => toggleType(type)}
+                        checked={selectedTypes.includes(type.value)}
+                        onChange={() => toggleType(type.value)}
                         className="size-4 rounded border-[2px] border-[#151515] accent-[#FDE047]"
                       />
-                      <span className="text-sm text-[#151515]">{type}</span>
+                      <span className="text-sm text-[#151515]">{type.label}</span>
                     </label>
                   ))}
                 </div>
@@ -631,7 +664,7 @@ function CompactListingCard({
               {listing.area}m²
             </span>
             <span className="rounded bg-[#F5F5F0] px-1.5 py-0.5 text-[9px] font-medium text-[#151515]/70">
-              {listing.roomType}
+              {roomTypeLabel(listing.roomType)}
             </span>
           </div>
         </div>

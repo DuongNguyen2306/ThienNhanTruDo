@@ -4,8 +4,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Heart, MapPin } from 'lucide-react'
 import { formatVnd, totalMonthly } from '@/lib/data'
-import { api } from '@/lib/api'
 import { useAuth } from '@/components/auth-provider'
+import { useSavedListings } from '@/lib/saved-listings-store'
 import { useState } from 'react'
 
 // Flexible listing type - accepts fields from both API and local types
@@ -40,7 +40,8 @@ interface BrutalListingCardProps {
 
 export function BrutalListingCard({ listing, variant = 'default' }: BrutalListingCardProps) {
   const { user } = useAuth()
-  const [isSaved, setIsSaved] = useState(false)
+  const { isSaved: isListingSaved, toggle } = useSavedListings()
+  const isSaved = isListingSaved(listing.id)
   const [isLoading, setIsLoading] = useState(false)
 
   const total = (listing.rent || 0)
@@ -59,18 +60,13 @@ export function BrutalListingCard({ listing, variant = 'default' }: BrutalListin
       return
     }
     
+    if (isLoading) return
     setIsLoading(true)
     try {
-      if (isSaved) {
-        // TODO: Implement unsave API when backend is ready
-        setIsSaved(false)
-      } else {
-        await api(`/api/tenant/saved/${listing.id}`, { method: 'POST' })
-        setIsSaved(true)
-      }
+      await toggle(listing.id)
     } catch (err) {
       console.error('Save error:', err)
-      alert('Không thể lưu tin. Vui lòng thử lại.')
+      alert(isSaved ? 'Không thể bỏ lưu tin. Vui lòng thử lại.' : 'Không thể lưu tin. Vui lòng thử lại.')
     } finally {
       setIsLoading(false)
     }
