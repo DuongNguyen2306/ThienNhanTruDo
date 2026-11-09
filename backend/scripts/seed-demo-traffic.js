@@ -1,5 +1,7 @@
 /**
- * Seed dữ liệu MẪU cho Facebook + Threads (tổng 78) vào `traffic_visits`.
+ * Seed dữ liệu MẪU cho 4 nguồn (Facebook / Threads / Google / Trực tiếp) vào
+ * `traffic_visits`. TARGET là TỔNG MONG MUỐN trong 7 ngày gần nhất: script tự
+ * trừ đi số lượt THẬT (production) đã có ⇒ tổng hiển thị = TARGET.
  *
  * MỤC ĐÍCH: khi custom dimension `traffic_source` của GA4 chưa được đăng ký,
  * bảng nguồn truy cập trên trang Admin hiển thị 0 cho Facebook/Threads. Seed
@@ -19,8 +21,18 @@ const TZ_OFFSET_MS = 420 * 60 * 1000; // UTC+7
 
 /** Tổng số lượt cần seed cho mỗi nguồn. */
 const TARGET = {
-  facebook: 52,
-  threads: 26,
+  facebook: 78,
+  threads: 32,
+  google: 18,
+  direct_other: 45,
+};
+
+/** medium tương ứng (khớp cách backend phân loại). */
+const MEDIUM = {
+  facebook: 'social',
+  threads: 'social',
+  google: 'organic',
+  direct_other: '(none)',
 };
 
 /**
@@ -67,10 +79,32 @@ function vnDate(offsetDays) {
     console.log(`Đã xoá ${removed.deletedCount} bản ghi seed cũ.`);
   }
 
-  const random = makeRandom(20261102);
-  const docs = [];
+  // ── Đếm lượt THẬT (production, không phải seed) trong 7 ngày gần nhất ──
+  const windowStart = new Date(
+    Date.parse(`${vnDate(DAYS - 1)}T00:00:00.000Z`) - TZ_OFFSET_MS
+  );
+  const realRows = await col
+    .aggregate([
+      {
+        $match: {
+          createdAt: { $gte: windowStart },
+          isLocal: { $ne: true },
+          siteHost: { $nin: [null, ''], $not: /^(localhost|127.|0.0.0.0)|.local(host)?$/i },
+        },
+      },
+      { $group: { _id: '$source', n: { $sum: 1 } } },
+    ])
+    .toArray();
+  const real = Object.fromEntries(realRows.map((r) => [r._id, r.n]));
 
-  for (const [source, total] of Object.entries(TARGET)) {
+  const random = makeRandom(20261109);
+  const docs = [];
+  const seeded = {};
+
+  for (const [source, target] of Object.entries(TARGET)) {
+    const total = Math.max(0, target - (real[source] || 0));
+    seeded[source] = total;
+    if (total === 0) continue;
     // Phân bố theo ngày: ngày càng gần càng nhiều lượt (hợp lý với traffic
     // tăng dần), nhưng có nhiễu ngẫu nhiên để biểu đồ nhìn tự nhiên.
     const weights = [];
@@ -119,8 +153,8 @@ function vnDate(offsetDays) {
             .update(`seed-${source}-${dateStr}-${k}-${random()}`)
             .digest('hex'),
           source,
-          medium: source === 'facebook' ? 'social' : 'social',
-          utmSource: source,
+          medium: MEDIUM[source],
+          utmSource: source === 'direct_other' ? null : source,
           // MARKER — dùng để xoá sạch riêng phần dữ liệu mẫu.
           referrerHost: `seed.${source}.example`,
           landingPath:
@@ -140,8 +174,10 @@ function vnDate(offsetDays) {
 
   // ── Báo cáo kết quả ───────────────────────────────────────────────────
   console.log(`\nĐã seed ${docs.length} bản ghi mẫu:`);
-  for (const [source, total] of Object.entries(TARGET)) {
-    console.log(`  ${source}: ${total}`);
+  for (const [source, target] of Object.entries(TARGET)) {
+    console.log(
+      `  ${source}: thật ${real[source] || 0} + seed ${seeded[source]} = ${Math.max(target, real[source] || 0)}`
+    );
   }
 
   const summary = await col
