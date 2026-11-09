@@ -113,6 +113,22 @@ function describeApiError(data: unknown): string | undefined {
   return typeof error === 'string' ? error : undefined
 }
 
+/**
+ * Ảnh cũ (trước khi chuyển sang Cloudinary) được lưu trong DB dưới dạng
+ * `http://localhost:3005/uploads/...` — URL đó chỉ chạy trên máy chạy backend.
+ * Khi frontend trỏ tới một backend công khai, đổi phần origin loopback thành
+ * API_BASE để trình duyệt tải ảnh từ `/uploads` của chính backend đó.
+ */
+const LEGACY_UPLOAD_URL_RE =
+  /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?\/uploads\//g
+
+function rewriteLegacyUploadUrls(text: string): string {
+  if (!API_BASE || /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/.test(API_BASE)) {
+    return text
+  }
+  return text.replace(LEGACY_UPLOAD_URL_RE, `${API_BASE}/uploads/`)
+}
+
 async function request<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
@@ -159,7 +175,10 @@ async function request<T = unknown>(
     })
     clearTimeout(timeoutId)
 
-    const data = await res.json().catch(() => null)
+    const data = await res
+      .text()
+      .then((text) => (text ? JSON.parse(rewriteLegacyUploadUrls(text)) : null))
+      .catch(() => null)
 
     if (!res.ok) {
       throw new ApiError(

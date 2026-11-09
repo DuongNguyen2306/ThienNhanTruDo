@@ -688,8 +688,15 @@ router.post('/upload', (req, res, next) => {
           .filter(r => r.status === 'fulfilled')
           .map(r => cloudinaryService.deleteAsset(r.value.public_id))
       );
-      console.error('[seller/upload] Cloudinary upload failed:', failed.reason?.message || failed.reason);
-      return res.status(502).json({ error: 'Tải ảnh lên Cloudinary thất bại, vui lòng thử lại' });
+      const reason = failed.reason?.error?.message || failed.reason?.message || String(failed.reason);
+      const httpCode = failed.reason?.error?.http_code || failed.reason?.http_code;
+      console.error('[seller/upload] Cloudinary upload failed:', httpCode || '', reason);
+      return res.status(502).json({
+        error: 'Tải ảnh lên Cloudinary thất bại, vui lòng thử lại',
+        // Lý do thật từ Cloudinary (vd. "Invalid Signature", "Stale request",
+        // "Must supply api_key") để biết cần sửa gì trên server.
+        detail: reason,
+      });
     }
 
     const uploadedFiles = results.map((r, i) => ({
